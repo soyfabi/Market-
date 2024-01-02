@@ -72,13 +72,11 @@ enum ItemParseAttributes_t {
 	ITEM_PARSE_MOVEABLE,
 	ITEM_PARSE_BLOCKPROJECTILE,
 	ITEM_PARSE_PICKUPABLE,
-	ITEM_PARSE_IGNOREBLOCKING,
 	ITEM_PARSE_FORCESERIALIZE,
 	ITEM_PARSE_FLOORCHANGE,
 	ITEM_PARSE_CORPSETYPE,
 	ITEM_PARSE_CONTAINERSIZE,
 	ITEM_PARSE_FLUIDSOURCE,
-	ITEM_PARSE_FLUIDCONTAINER,
 	ITEM_PARSE_READABLE,
 	ITEM_PARSE_WRITEABLE,
 	ITEM_PARSE_MAXTEXTLEN,
@@ -263,7 +261,7 @@ class ItemType
 			return (type == ITEM_TYPE_RUNE);
 		}
 		bool isPickupable() const {
-			return pickupable;
+			return (allowPickupable || pickupable);
 		}
 		bool isUseable() const {
 			return (useable);
@@ -304,6 +302,7 @@ class ItemType
 		uint16_t id = 0;
 		uint16_t clientId = 0;
 		bool stackable = false;
+		bool isAnimation = false;
 
 		std::string name;
 		std::string article;
@@ -372,7 +371,7 @@ class ItemType
 		bool blockPickupable = false;
 		bool blockProjectile = false;
 		bool blockPathFind = false;
-		bool ignoreBlocking = false;
+		bool allowPickupable = false;
 		bool showDuration = false;
 		bool showCharges = false;
 		bool showAttributes = false;

@@ -353,6 +353,7 @@ ReturnValue Actions::internalUseItem(Player* player, const Position& pos, uint8_
 		if (bed->trySleep(player)) {
 			player->setBedItem(bed);
 			bed->sleep(player);
+			//g_game.sendOfflineTrainingDialog(player);
 		}
 
 		return RETURNVALUE_NOERROR;
@@ -366,7 +367,6 @@ ReturnValue Actions::internalUseItem(Player* player, const Position& pos, uint8_
 			DepotLocker* myDepotLocker = player->getDepotLocker(depot->getDepotId());
 			myDepotLocker->setParent(depot->getParent()->getTile());
 			openContainer = myDepotLocker;
-			player->setLastDepotId(depot->getDepotId());
 		} else {
 			openContainer = container;
 		}
@@ -507,10 +507,33 @@ bool Action::configureEvent(const pugi::xml_node& node)
 	return true;
 }
 
-bool Action::loadFunction(const pugi::xml_attribute& attr, bool)
+namespace {
+
+bool enterMarket(Player*, Item*, const Position&, Thing*, const Position&, bool)
 {
-	std::cout << "[Warning - Action::loadFunction] Function \"" << attr.as_string() << "\" does not exist." << std::endl;
-	return false;
+
+	//player->sendMarketEnter(player->getLastDepotId());
+	return true;
+}
+
+}
+
+bool Action::loadFunction(const pugi::xml_attribute& attr, bool isScripted)
+{
+	const char* functionName = attr.as_string();
+	if (strcasecmp(functionName, "market") == 0) {
+		function = enterMarket;
+	} else {
+		if (!isScripted) {
+			std::cout << "[Warning - Action::loadFunction] Function \"" << functionName << "\" does not exist." << std::endl;
+			return false;
+		}
+	}
+
+	if (!isScripted) {
+		scripted = false;
+	}
+	return true;
 }
 
 std::string Action::getScriptEventName() const

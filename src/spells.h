@@ -214,6 +214,13 @@ class Spell : public BaseSpell
 		void setSecondaryGroup(SpellGroup_t g) {
 			secondaryGroup = g;
 		}
+
+		uint32_t getCooldown() const {
+			return cooldown;
+		}
+		void setCooldown(uint32_t cd) {
+			cooldown = cd;
+		}
 		uint32_t getSecondaryCooldown() const {
 			return secondaryGroupCooldown;
 		}
@@ -225,13 +232,6 @@ class Spell : public BaseSpell
 		}
 		void setGroupCooldown(uint32_t cd) {
 			groupCooldown = cd;
-		}
-
-		uint32_t getCooldown() const {
-			return cooldown;
-		}
-		void setCooldown(uint32_t cd) {
-			cooldown = cd;
 		}
 
 		int32_t getRange() const {
@@ -302,9 +302,9 @@ class Spell : public BaseSpell
 		SpellGroup_t group = SPELLGROUP_NONE;
 		SpellGroup_t secondaryGroup = SPELLGROUP_NONE;
 
+		uint32_t cooldown = 1000;
 		uint32_t groupCooldown = 1000;
 		uint32_t secondaryGroupCooldown = 0;
-		uint32_t cooldown = 1000;
 		uint32_t level = 0;
 		uint32_t magLevel = 0;
 		int32_t range = -1;

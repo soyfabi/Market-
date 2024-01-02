@@ -99,12 +99,18 @@ enum itemAttrTypes : uint32_t {
 
 enum VipStatus_t : uint8_t {
 	VIPSTATUS_OFFLINE = 0,
-	VIPSTATUS_ONLINE = 1
+	VIPSTATUS_ONLINE = 1,
+	VIPSTATUS_PENDING = 2
 };
 
 enum MarketAction_t {
 	MARKETACTION_BUY = 0,
 	MARKETACTION_SELL = 1,
+};
+
+enum MarketRequest_t {
+	MARKETREQUEST_OWN_OFFERS = 0xFFFE,
+	MARKETREQUEST_OWN_HISTORY = 0xFFFF,
 };
 
 enum MarketOfferState_t {
@@ -352,7 +358,9 @@ enum ConditionType_t {
 	CONDITION_CURSED = 1 << 22,
 	CONDITION_EXHAUST_COMBAT = 1 << 23, // unused
 	CONDITION_EXHAUST_HEAL = 1 << 24, // unused
-	CONDITION_PACIFIED = 1 << 25
+	CONDITION_PACIFIED = 1 << 25,
+	CONDITION_SPELLCOOLDOWN = 1 << 26,
+	CONDITION_SPELLGROUPCOOLDOWN = 1 << 27,
 };
 
 enum ConditionId_t : int8_t {
@@ -454,8 +462,18 @@ enum ReturnValue {
 	RETURNVALUE_TRADEPLAYERHIGHESTBIDDER,
 	RETURNVALUE_YOUCANNOTTRADETHISHOUSE,
 	RETURNVALUE_YOUDONTHAVEREQUIREDPROFESSION,
+	RETURNVALUE_CANNOTMOVEITEMISNOTSTOREITEM,
 	RETURNVALUE_ITEMCANNOTBEMOVEDTHERE,
 	RETURNVALUE_YOUCANNOTUSETHISBED,
+};
+
+enum SpeechBubble_t
+{
+	SPEECHBUBBLE_NONE = 0,
+	SPEECHBUBBLE_NORMAL = 1,
+	SPEECHBUBBLE_TRADE = 2,
+	SPEECHBUBBLE_QUEST = 3,
+	SPEECHBUBBLE_QUESTTRADER = 4,
 };
 
 enum MapMark_t
@@ -485,6 +503,7 @@ enum MapMark_t
 struct Outfit_t {
 	uint16_t lookType = 0;
 	uint16_t lookTypeEx = 0;
+	uint16_t lookMount = 0;
 	uint8_t lookHead = 0;
 	uint8_t lookBody = 0;
 	uint8_t lookLegs = 0;
@@ -538,7 +557,6 @@ struct MarketOfferEx {
 	std::string playerName;
 };
 
-
 struct HistoryMarketOffer {
 	uint32_t timestamp;
 	uint32_t price;
@@ -588,6 +606,8 @@ struct CombatDamage
 	bool leeched = false;
 };
 
+using MarketOfferList = std::list<MarketOffer>;
+using HistoryMarketOfferList = std::list<HistoryMarketOffer>;
 using ShopInfoList = std::list<ShopInfo>;
 
 enum MonstersEvent_t : uint8_t {

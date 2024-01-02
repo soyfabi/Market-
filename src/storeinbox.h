@@ -17,33 +17,33 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef FS_PROTOCOLLOGIN_H_1238F4B473074DF2ABC595C29E81C46D
-#define FS_PROTOCOLLOGIN_H_1238F4B473074DF2ABC595C29E81C46D
+#ifndef FS_STOREINBOX_H_074FB99DD3FEDB823AAD2D2CD6F10119
+#define FS_STOREINBOX_H_074FB99DD3FEDB823AAD2D2CD6F10119
 
-#include "protocol.h"
+#include "container.h"
 
-class NetworkMessage;
-class OutputMessage;
-
-class ProtocolLogin : public Protocol
+class StoreInbox final : public Container
 {
 	public:
-		// static protocol information
-		enum {server_sends_first = false};
-		enum {protocol_identifier = 0x01};
-		enum {use_checksum = false};
-		static const char* protocol_name() {
-			return "login protocol";
+		explicit StoreInbox(uint16_t type);
+
+		StoreInbox* getStoreInbox() override {
+			return this;
+		}
+		const StoreInbox* getStoreInbox() const override {
+			return this;
 		}
 
-		explicit ProtocolLogin(Connection_ptr connection) : Protocol(connection) {}
+		//cylinder implementations
+		ReturnValue queryAdd(int32_t index, const Thing& thing, uint32_t count,
+			uint32_t flags, Creature* actor = nullptr) const override;
 
-		void onRecvFirstMessage(NetworkMessage& msg) override;
+		void postAddNotification(Thing* thing, const Cylinder* oldParent, int32_t index, cylinderlink_t link = LINK_OWNER) override;
+		void postRemoveNotification(Thing* thing, const Cylinder* newParent, int32_t index, cylinderlink_t link = LINK_OWNER) override;
 
-	private:
-		void disconnectClient(const std::string& message, uint16_t version);
-
-		void getCharacterList(const std::string& accountName, const std::string& password, const std::string& token, uint16_t version);
+		bool canRemove() const override {
+			return false;
+		}
 };
 
 #endif

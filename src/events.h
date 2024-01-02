@@ -43,6 +43,7 @@ class Events
 		int32_t partyOnShareExperience = -1;
 
 		// Player
+		int32_t playerOnBrowseField = -1;
 		int32_t playerOnLook = -1;
 		int32_t playerOnLookInBattleList = -1;
 		int32_t playerOnLookInTrade = -1;
@@ -59,6 +60,7 @@ class Events
 		int32_t playerOnGainExperience = -1;
 		int32_t playerOnLoseExperience = -1;
 		int32_t playerOnGainSkillTries = -1;
+		int32_t playerOnWrapItem = -1;
 
 		// Monster
 		int32_t monsterOnDropLoot = -1;
@@ -83,6 +85,7 @@ class Events
 		void eventPartyOnShareExperience(Party* party, uint64_t& exp);
 
 		// Player
+		bool eventPlayerOnBrowseField(Player* player, const Position& position);
 		void eventPlayerOnLook(Player* player, const Position& position, Thing* thing, uint8_t stackpos, int32_t lookDistance);
 		void eventPlayerOnLookInBattleList(Player* player, Creature* creature, int32_t lookDistance);
 		void eventPlayerOnLookInTrade(Player* player, Player* partner, Item* item, int32_t lookDistance);
@@ -99,6 +102,7 @@ class Events
 		void eventPlayerOnGainExperience(Player* player, Creature* source, uint64_t& exp, uint64_t rawExp);
 		void eventPlayerOnLoseExperience(Player* player, uint64_t& exp);
 		void eventPlayerOnGainSkillTries(Player* player, skills_t skill, uint64_t& tries);
+		void eventPlayerOnWrapItem(Player* player, Item* item);
 
 		// Monster
 		void eventMonsterOnDropLoot(Monster* monster, Container* corpse);

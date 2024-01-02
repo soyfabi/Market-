@@ -73,10 +73,12 @@ Item* Item::CreateItem(const uint16_t type, uint16_t count /*= 0*/)
 			newItem = new Item(type - 2, count);
 		} else if (it.id >= 2202 && it.id <= 2206) { // magic rings
 			newItem = new Item(type - 37, count);
-		} else if (it.id == 2640) { // soft boots
+		/*} else if (it.id == 2640) { // soft boots
 			newItem = new Item(6132, count);
 		} else if (it.id == 6301) { // death ring
 			newItem = new Item(6300, count);
+		} else if (it.id == 18528) { // prismatic ring
+			newItem = new Item(18408, count);*/
 		} else {
 			newItem = new Item(type, count);
 		}
@@ -335,7 +337,7 @@ uint16_t Item::getSubType() const
 		return getFluidType();
 	} else if (it.stackable) {
 		return count;
-	} else if (it.charges != 0) {
+	} else if (it.charges != 0 || it.isRune()) {
 		return getCharges();
 	}
 	return count;
@@ -594,6 +596,26 @@ Attr_ReadValue Item::readAttr(AttrTypes_t attr, PropStream& propStream)
 			break;
 		}
 
+		/*case ATTR_WRAPID: {
+			uint16_t wrapId;
+			if (!propStream.read<uint16_t>(wrapId)) {
+				return ATTR_READ_ERROR;
+			}
+
+			setIntAttr(ITEM_ATTRIBUTE_WRAPID, wrapId);
+			break;
+		}
+
+		case ATTR_STOREITEM: {
+			uint8_t storeItem;
+			if (!propStream.read<uint8_t>(storeItem)) {
+				return ATTR_READ_ERROR;
+			}
+
+			setIntAttr(ITEM_ATTRIBUTE_STOREITEM, storeItem);
+			break;
+		}*/
+
 		//these should be handled through derived classes
 		//If these are called then something has changed in the items.xml since the map was saved
 		//just read the values
@@ -809,6 +831,16 @@ void Item::serializeAttr(PropWriteStream& propWriteStream) const
 		propWriteStream.write<int32_t>(getIntAttr(ITEM_ATTRIBUTE_DECAYTO));
 	}
 
+	/*if (hasAttribute(ITEM_ATTRIBUTE_WRAPID)) {
+		propWriteStream.write<uint8_t>(ATTR_WRAPID);
+		propWriteStream.write<uint16_t>(getIntAttr(ITEM_ATTRIBUTE_WRAPID));
+	}
+
+	if (hasAttribute(ITEM_ATTRIBUTE_STOREITEM)) {
+		propWriteStream.write<uint8_t>(ATTR_STOREITEM);
+		propWriteStream.write<uint8_t>(getIntAttr(ITEM_ATTRIBUTE_STOREITEM));
+	}*/
+
 	if (hasAttribute(ITEM_ATTRIBUTE_CUSTOM)) {
 		const ItemAttributes::CustomAttributeMap* customAttrMap = attributes->getCustomAttributeMap();
 		propWriteStream.write<uint8_t>(ATTR_CUSTOM_ATTRIBUTES);
@@ -865,56 +897,13 @@ std::string Item::getDescription(const ItemType& it, int32_t lookDistance,
 	}
 
 	if (it.isRune()) {
-		if (it.runeLevel > 0 || it.runeMagLevel > 0) {
-			if (RuneSpell* rune = g_spells->getRuneSpell(it.id)) {
-				int32_t tmpSubType = subType;
-				if (item) {
-					tmpSubType = item->getSubType();
-				}
-				s << ". " << (it.stackable && tmpSubType > 1 ? "They" : "It") << " can only be used by ";
+		if (g_spells->getRuneSpell(it.id)) {
+			if (it.runeMagLevel > 0) {
+				s << " for magic level " << it.runeMagLevel;
+			}
 
-				const VocSpellMap& vocMap = rune->getVocMap();
-				std::vector<Vocation*> showVocMap;
-
-				// vocations are usually listed with the unpromoted and promoted version, the latter being
-				// hidden from description, so `total / 2` is most likely the amount of vocations to be shown.
-				showVocMap.reserve(vocMap.size() / 2);
-				for (const auto& voc : vocMap) {
-					if (voc.second) {
-						showVocMap.push_back(g_vocations.getVocation(voc.first));
-					}
-				}
-
-				if (!showVocMap.empty()) {
-					auto vocIt = showVocMap.begin(), vocLast = (showVocMap.end() - 1);
-					while (vocIt != vocLast) {
-						s << asLowerCaseString((*vocIt)->getVocName()) << "s";
-						if (++vocIt == vocLast) {
-							s << " and ";
-						} else {
-							s << ", ";
-						}
-					}
-					s << asLowerCaseString((*vocLast)->getVocName()) << "s";
-				} else {
-					s << "players";
-				}
-
-				s << " with";
-
-				if (it.runeLevel > 0) {
-					s << " level " << it.runeLevel;
-				}
-
-				if (it.runeMagLevel > 0) {
-					if (it.runeLevel > 0) {
-						s << " and";
-					}
-
-					s << " magic level " << it.runeMagLevel;
-				}
-
-				s << " or higher";
+			if (!it.runeSpellName.empty()) {
+				s << ". It's an \"" << it.runeSpellName << "\" spell (" << (item ? item->getCharges() : it.charges) << "x)";
 			}
 		}
 	} else if (it.weaponType != WEAPON_NONE) {
@@ -1012,19 +1001,19 @@ std::string Item::getDescription(const ItemType& it, int32_t lookDistance,
 			}
 
 			for (uint8_t i = SPECIALSKILL_FIRST; i <= SPECIALSKILL_LAST; i++) {
-                if (!it.abilities->specialSkills[i]) {
-                    continue;
-                }
+				if (!it.abilities->specialSkills[i]) {
+					continue;
+				}
 
-                if (begin) {
-                    begin = false;
-                    s << " (";
-                } else {
-                    s << ", ";
-                }
+				if (begin) {
+					begin = false;
+					s << " (";
+				} else {
+					s << ", ";
+				}
 
-                s << getSpecialSkillName(i) << ' ' << std::showpos << it.abilities->specialSkills[i] << '%' << std::noshowpos;
-            }
+				s << getSpecialSkillName(i) << ' ' << std::showpos << it.abilities->specialSkills[i] << '%' << std::noshowpos;
+			}
 
 			if (it.abilities->stats[STAT_MAGICPOINTS]) {
 				if (begin) {
@@ -1737,6 +1726,30 @@ void Item::startDecaying()
 {
 	g_game.startDecay(this);
 }
+
+/*bool Item::hasMarketAttributes() const
+{
+	if (attributes == nullptr) {
+		return true;
+	}
+
+	for (const auto& attr : attributes->getList()) {
+		if (attr.type == ITEM_ATTRIBUTE_CHARGES) {
+			uint16_t charges = static_cast<uint16_t>(attr.value.integer);
+			if (charges != items[id].charges) {
+				return false;
+			}
+		} else if (attr.type == ITEM_ATTRIBUTE_DURATION) {
+			uint32_t duration = static_cast<uint32_t>(attr.value.integer);
+			if (duration != getDefaultDuration()) {
+				return false;
+			}
+		} else {
+			return false;
+		}
+	}
+	return true;
+}*/
 
 template<>
 const std::string& ItemAttributes::CustomAttribute::get<std::string>() {

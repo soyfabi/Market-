@@ -23,6 +23,8 @@
 
 #include "game.h"
 
+#include "iomarket.h"
+
 #include "configmanager.h"
 #include "scriptmanager.h"
 #include "rsa.h"
@@ -138,8 +140,8 @@ void printServerVersion()
 	std::cout << std::endl;
 
 	std::cout << "A server developed by " << STATUS_SERVER_DEVELOPERS << std::endl;
-	std::cout << "Downgraded and further developed by Nekiro" << std::endl;
-	std::cout << "Visit our forum for updates, support, and resources: http://otland.net/." << std::endl;
+	std::cout << "A server downgraded by Nekiro" << std::endl;
+	std::cout << "Visit our forum for updates, support, and resources: https://otland.net/." << std::endl;
 	std::cout << std::endl;
 }
 
@@ -301,7 +303,7 @@ void mainLoader(int, char*[], ServiceManager* services)
 	services->add<ProtocolStatus>(static_cast<uint16_t>(g_config.getNumber(ConfigManager::STATUS_PORT)));
 
 	// Legacy login protocol
-	services->add<ProtocolOld>(static_cast<uint16_t>(g_config.getNumber(ConfigManager::LOGIN_PORT)));
+	//services->add<ProtocolOld>(static_cast<uint16_t>(g_config.getNumber(ConfigManager::LOGIN_PORT)));
 
 	RentPeriod_t rentPeriod;
 	std::string strRentPeriod = asLowerCaseString(g_config.getString(ConfigManager::HOUSE_RENT_PERIOD));
@@ -319,6 +321,9 @@ void mainLoader(int, char*[], ServiceManager* services)
 	}
 
 	g_game.map.houses.payHouses(rentPeriod);
+
+	//IOMarket::checkExpiredOffers();
+	//IOMarket::getInstance().updateStatistics();
 
 	std::cout << ">> Loaded all modules, server starting up..." << std::endl;
 
@@ -355,7 +360,7 @@ bool argumentsHandler(const StringVector& args)
 		if (tmp[0] == "--config")
 			g_config.setString(ConfigManager::CONFIG_FILE, tmp[1]);
 		else if (tmp[0] == "--ip")
-			g_config.setString(ConfigManager::IP_STRING, tmp[1]);
+			g_config.setString(ConfigManager::IP, tmp[1]);
 		else if (tmp[0] == "--login-port")
 			g_config.setNumber(ConfigManager::LOGIN_PORT, std::stoi(tmp[1]));
 		else if (tmp[0] == "--game-port")

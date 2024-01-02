@@ -19,63 +19,51 @@
 
 #include "otpch.h"
 
-#include "depotchest.h"
+#include "inbox.h"
 #include "tools.h"
 
-DepotChest::DepotChest(uint16_t type) : Container(type) {}
+Inbox::Inbox(uint16_t type) : Container(type, 30, false, true) {}
 
-ReturnValue DepotChest::queryAdd(int32_t index, const Thing& thing, uint32_t count, uint32_t flags, Creature* actor/* = nullptr*/) const
+ReturnValue Inbox::queryAdd(int32_t, const Thing& thing, uint32_t,
+		uint32_t flags, Creature*) const
 {
+	if (!hasBitSet(FLAG_NOLIMIT, flags)) {
+		return RETURNVALUE_CONTAINERNOTENOUGHROOM;
+	}
+
 	const Item* item = thing.getItem();
-	if (item == nullptr) {
+	if (!item) {
 		return RETURNVALUE_NOTPOSSIBLE;
 	}
 
-	bool skipLimit = hasBitSet(FLAG_NOLIMIT, flags);
-	if (!skipLimit) {
-		int32_t addCount = 0;
-
-		if ((item->isStackable() && item->getItemCount() != count)) {
-			addCount = 1;
-		}
-
-		if (item->getTopParent() != this) {
-			if (const Container* container = item->getContainer()) {
-				addCount = container->getItemHoldingCount() + 1;
-			} else {
-				addCount = 1;
-			}
-		}
-
-		if (getItemHoldingCount() + addCount > maxDepotItems) {
-			return RETURNVALUE_DEPOTISFULL;
-		}
+	if (item == this) {
+		return RETURNVALUE_THISISIMPOSSIBLE;
 	}
 
-	return Container::queryAdd(index, thing, count, flags, actor);
+	if (!item->isPickupable()) {
+		return RETURNVALUE_CANNOTPICKUP;
+	}
+
+	return RETURNVALUE_NOERROR;
 }
 
-void DepotChest::postAddNotification(Thing* thing, const Cylinder* oldParent, int32_t index, cylinderlink_t)
+void Inbox::postAddNotification(Thing* thing, const Cylinder* oldParent, int32_t index, cylinderlink_t)
 {
 	Cylinder* parent = getParent();
 	if (parent != nullptr) {
 		parent->postAddNotification(thing, oldParent, index, LINK_PARENT);
 	}
-
-	save = true;
 }
 
-void DepotChest::postRemoveNotification(Thing* thing, const Cylinder* newParent, int32_t index, cylinderlink_t)
+void Inbox::postRemoveNotification(Thing* thing, const Cylinder* newParent, int32_t index, cylinderlink_t)
 {
 	Cylinder* parent = getParent();
 	if (parent != nullptr) {
 		parent->postRemoveNotification(thing, newParent, index, LINK_PARENT);
 	}
-
-	save = true;
 }
 
-Cylinder* DepotChest::getParent() const
+Cylinder* Inbox::getParent() const
 {
 	if (parent) {
 		return parent->getParent();

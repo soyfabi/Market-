@@ -908,7 +908,7 @@ class Item : virtual public Thing
 			return items[id].moveable;
 		}
 		bool isPickupable() const {
-			return items[id].isPickupable();
+			return items[id].pickupable;
 		}
 		bool isUseable() const {
 			return items[id].useable;
@@ -922,6 +922,9 @@ class Item : virtual public Thing
 		}
 		bool hasWalkStack() const {
 			return items[id].walkStack;
+		}
+		bool isRune() const {
+			return items[id].isRune();
 		}
 
 		const std::string& getName() const {
@@ -952,6 +955,10 @@ class Item : virtual public Thing
 		}
 
 		static uint32_t countByType(const Item* i, int32_t subType) {
+			if (i->isRune()) {
+				return i->getSubType();
+			}
+
 			if (subType == -1 || subType == i->getSubType()) {
 				return i->getItemCount();
 			}

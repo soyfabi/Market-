@@ -44,7 +44,6 @@ const std::unordered_map<std::string, ItemParseAttributes_t> ItemParseAttributes
 	{"moveable", ITEM_PARSE_MOVEABLE},
 	{"movable", ITEM_PARSE_MOVEABLE},
 	{"blockprojectile", ITEM_PARSE_BLOCKPROJECTILE},
-	{"ignoreblocking", ITEM_PARSE_IGNOREBLOCKING},
 	{"allowpickupable", ITEM_PARSE_PICKUPABLE},
 	{"pickupable", ITEM_PARSE_PICKUPABLE},
 	{"forceserialize", ITEM_PARSE_FORCESERIALIZE},
@@ -53,7 +52,6 @@ const std::unordered_map<std::string, ItemParseAttributes_t> ItemParseAttributes
 	{"corpsetype", ITEM_PARSE_CORPSETYPE},
 	{"containersize", ITEM_PARSE_CONTAINERSIZE},
 	{"fluidsource", ITEM_PARSE_FLUIDSOURCE},
-	{"fluidcontainer", ITEM_PARSE_FLUIDCONTAINER},
 	{"readable", ITEM_PARSE_READABLE},
 	{"writeable", ITEM_PARSE_WRITEABLE},
 	{"maxtextlen", ITEM_PARSE_MAXTEXTLEN},
@@ -294,10 +292,11 @@ bool Items::loadFromOtb(const std::string& file)
 
 	if (majorVersion == 0xFFFFFFFF) {
 		std::cout << "[Warning - Items::loadFromOtb] items.otb using generic client version." << std::endl;
-	} else if (majorVersion != 3) {
+	/*} else if (majorVersion != 3) {
 		std::cout << "Old version detected, a newer version of items.otb is required." << std::endl;
-		return false;
-	} else if (minorVersion < CLIENT_VERSION_860_OLD) {
+		return false;*/
+	//} else if (minorVersion < CLIENT_VERSION_1098) {
+	} else if (minorVersion < CLIENT_VERSION_760) {
 		std::cout << "A newer version of items.otb is required." << std::endl;
 		return false;
 	}
@@ -462,6 +461,7 @@ bool Items::loadFromOtb(const std::string& file)
 		iType.rotatable = hasBitSet(FLAG_ROTATABLE, flags);
 		iType.canReadText = hasBitSet(FLAG_READABLE, flags);
 		iType.lookThrough = hasBitSet(FLAG_LOOKTHROUGH, flags);
+		iType.isAnimation = hasBitSet(FLAG_ANIMATION, flags);
 		// iType.walkStack = !hasBitSet(FLAG_FULLTILE, flags);
 		iType.forceUse = hasBitSet(FLAG_FORCEUSE, flags);
 
@@ -671,13 +671,8 @@ void Items::parseItemNode(const pugi::xml_node& itemNode, uint16_t id)
 					break;
 				}
 
-				case ITEM_PARSE_IGNOREBLOCKING: {
-					it.ignoreBlocking = valueAttribute.as_bool();
-					break;
-				}
-
 				case ITEM_PARSE_PICKUPABLE: {
-					it.pickupable = valueAttribute.as_bool();
+					it.allowPickupable = valueAttribute.as_bool();
 					break;
 				}
 
@@ -720,13 +715,6 @@ void Items::parseItemNode(const pugi::xml_node& itemNode, uint16_t id)
 						it.fluidSource = it2->second;
 					} else {
 						std::cout << "[Warning - Items::parseItemNode] Unknown fluidSource: " << valueAttribute.as_string() << std::endl;
-					}
-					break;
-				}
-
-				case ITEM_PARSE_FLUIDCONTAINER: {
-					if (valueAttribute.as_bool()) {
-						it.group = ITEM_GROUP_FLUID;
 					}
 					break;
 				}

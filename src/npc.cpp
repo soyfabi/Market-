@@ -32,9 +32,9 @@ NpcScriptInterface* Npc::scriptInterface = nullptr;
 void Npcs::reload()
 {
 	const std::map<uint32_t, Npc*>& npcs = g_game.getNpcs();
-	for (const auto& it : npcs) {
+	/*for (const auto& it : npcs) {
 		it.second->closeAllShopWindows();
-	}
+	}*/
 
 	delete Npc::scriptInterface;
 	Npc::scriptInterface = nullptr;
@@ -105,6 +105,7 @@ void Npc::reset()
 	attackable = false;
 	ignoreHeight = false;
 	focusCreature = 0;
+	speechBubble = SPEECHBUBBLE_NONE;
 
 	delete npcEventHandler;
 	npcEventHandler = nullptr;
@@ -180,6 +181,10 @@ bool Npc::loadFromXml()
 		ignoreHeight = attr.as_bool();
 	}
 
+	if ((attr = npcNode.attribute("speechbubble"))) {
+		speechBubble = pugi::cast<uint32_t>(attr.value());
+	}
+
 	if ((attr = npcNode.attribute("skull"))) {
 		setSkull(getSkullType(asLowerCaseString(attr.as_string())));
 	}
@@ -217,6 +222,7 @@ bool Npc::loadFromXml()
 		} else if ((attr = lookNode.attribute("typeex"))) {
 			defaultOutfit.lookTypeEx = pugi::cast<uint16_t>(attr.value());
 		}
+		defaultOutfit.lookMount = pugi::cast<uint16_t>(lookNode.attribute("mount").value());
 
 		currentOutfit = defaultOutfit;
 	}
@@ -290,7 +296,7 @@ void Npc::onRemoveCreature(Creature* creature, bool isLogout)
 	Creature::onRemoveCreature(creature, isLogout);
 
 	if (creature == this) {
-		closeAllShopWindows();
+		//closeAllShopWindows();
 		if (npcEventHandler) {
 			npcEventHandler->onCreatureDisappear(creature);
 		}
@@ -372,8 +378,10 @@ void Npc::doSay(const std::string& text)
 void Npc::doSayToPlayer(Player* player, const std::string& text)
 {
 	if (player) {
-		player->sendCreatureSay(this, TALKTYPE_PRIVATE_NP, text);
-		player->onCreatureSay(this, TALKTYPE_PRIVATE_NP, text);
+		//player->sendCreatureSay(this, TALKTYPE_PRIVATE_NP, text);
+		//player->onCreatureSay(this, TALKTYPE_PRIVATE_NP, text);
+		player->sendCreatureSay(this, TALKTYPE_SAY, text);
+		player->onCreatureSay(this, TALKTYPE_SAY, text);
 	}
 }
 
@@ -654,13 +662,13 @@ int NpcScriptInterface::luaActionSay(lua_State* L)
 	}
 
 	const std::string& text = getString(L, 1);
-	if (lua_gettop(L) >= 2) {
+	/*if (lua_gettop(L) >= 2) {
 		Player* target = getPlayer(L, 2);
 		if (target) {
 			npc->doSayToPlayer(target, text);
 			return 0;
 		}
-	}
+	}*/
 
 	npc->doSay(text);
 	return 0;
@@ -870,7 +878,7 @@ int NpcScriptInterface::luaOpenShopWindow(lua_State* L)
 
 	npc->addShopPlayer(player);
 	player->setShopOwner(npc, buyCallback, sellCallback);
-	player->openShopWindow(items);
+	player->openShopWindow(npc, items);
 
 	pushBoolean(L, true);
 	return 1;
@@ -1075,7 +1083,7 @@ int NpcScriptInterface::luaNpcOpenShopWindow(lua_State* L)
 	npc->addShopPlayer(player);
 
 	player->setShopOwner(npc, buyCallback, sellCallback);
-	player->openShopWindow(items);
+	player->openShopWindow(npc, items);
 
 	pushBoolean(L, true);
 	return 1;

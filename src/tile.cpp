@@ -73,34 +73,6 @@ bool Tile::hasProperty(const Item* exclude, ITEMPROPERTY prop) const
 	return false;
 }
 
-bool Tile::hasHeight(uint32_t n) const
-{
-	uint32_t height = 0;
-
-	if (ground) {
-		if (ground->hasProperty(CONST_PROP_HASHEIGHT)) {
-			++height;
-		}
-
-		if (n == height) {
-			return true;
-		}
-	}
-
-	if (const TileItemVector* items = getItemList()) {
-		for (const Item* item : *items) {
-			if (item->hasProperty(CONST_PROP_HASHEIGHT)) {
-				++height;
-			}
-
-			if (n == height) {
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
 size_t Tile::getCreatureCount() const
 {
 	if (const CreatureVector* creatures = getCreatures()) {
@@ -362,6 +334,14 @@ Thing* Tile::getTopVisibleThing(const Creature* creature)
 
 void Tile::onAddTileItem(Item* item)
 {
+	/*if (item->hasProperty(CONST_PROP_MOVEABLE) || item->getContainer()) {
+		auto it = g_game.browseFields.find(this);
+		if (it != g_game.browseFields.end()) {
+			it->second->addItemBack(item);
+			item->setParent(it->second);
+		}
+	}*/
+
 	setTileFlags(item);
 
 	const Position& cylinderMapPos = getPosition();
@@ -390,6 +370,24 @@ void Tile::onAddTileItem(Item* item)
 
 void Tile::onUpdateTileItem(Item* oldItem, const ItemType& oldType, Item* newItem, const ItemType& newType)
 {
+	if (newItem->hasProperty(CONST_PROP_MOVEABLE) || newItem->getContainer()) {
+		auto it = g_game.browseFields.find(this);
+		if (it != g_game.browseFields.end()) {
+			int32_t index = it->second->getThingIndex(oldItem);
+			if (index != -1) {
+				it->second->replaceThing(index, newItem);
+				newItem->setParent(it->second);
+			}
+		}
+	} else if (oldItem->hasProperty(CONST_PROP_MOVEABLE) || oldItem->getContainer()) {
+		auto it = g_game.browseFields.find(this);
+		if (it != g_game.browseFields.end()) {
+			Cylinder* oldParent = oldItem->getParent();
+			it->second->removeThing(oldItem, oldItem->getItemCount());
+			oldItem->setParent(oldParent);
+		}
+	}
+
 	const Position& cylinderMapPos = getPosition();
 
 	SpectatorVec spectators;
@@ -410,6 +408,13 @@ void Tile::onUpdateTileItem(Item* oldItem, const ItemType& oldType, Item* newIte
 
 void Tile::onRemoveTileItem(const SpectatorVec& spectators, const std::vector<int32_t>& oldStackPosVector, Item* item)
 {
+	if (item->hasProperty(CONST_PROP_MOVEABLE) || item->getContainer()) {
+		auto it = g_game.browseFields.find(this);
+		if (it != g_game.browseFields.end()) {
+			it->second->removeThing(item, item->getItemCount());
+		}
+	}
+
 	resetTileFlags(item);
 
 	const Position& cylinderMapPos = getPosition();
@@ -550,12 +555,19 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t flags
 				}
 			}
 
+			const Tile* playerTile = player->getTile();
+			if (playerTile) {
+				uint32_t height = playerTile->getHeight();
+				if (player->getPosition().z == getPosition().z && height != 3 && height < getHeight() && height + 1 != getHeight()) {
+					return RETURNVALUE_NOTPOSSIBLE;
+				}
+			}
+
 			if (player->getParent() == nullptr && hasFlag(TILESTATE_NOLOGOUT)) {
 				//player is trying to login to a "no logout" tile
 				return RETURNVALUE_NOTPOSSIBLE;
 			}
 
-			const Tile* playerTile = player->getTile();
 			if (playerTile && player->isPzLocked()) {
 				if (!playerTile->hasFlag(TILESTATE_PVPZONE)) {
 					//player is trying to enter a pvp zone while being pz-locked
@@ -614,6 +626,10 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t flags
 			return RETURNVALUE_NOERROR;
 		}
 
+		/*if (item->isStoreItem()) {
+			return RETURNVALUE_ITEMCANNOTBEMOVEDTHERE;
+		}*/
+
 		bool itemIsHangable = item->isHangable();
 		if (ground == nullptr && !itemIsHangable) {
 			return RETURNVALUE_NOTPOSSIBLE;
@@ -640,7 +656,7 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t flags
 			if (ground) {
 				const ItemType& iiType = Item::items[ground->getID()];
 				if (iiType.blockSolid) {
-					if (!iiType.ignoreBlocking || item->isMagicField() || item->isBlocking()) {
+					if (!iiType.allowPickupable || item->isMagicField() || item->isBlocking()) {
 						if (!item->isPickupable()) {
 							return RETURNVALUE_NOTENOUGHROOM;
 						}
@@ -659,7 +675,7 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t flags
 						continue;
 					}
 
-					if (iiType.ignoreBlocking && !item->isMagicField() && !item->isBlocking()) {
+					if (iiType.allowPickupable && !item->isMagicField() && !item->isBlocking()) {
 						continue;
 					}
 
@@ -819,7 +835,7 @@ void Tile::addThing(int32_t, Thing* thing)
 
 		creature->setParent(this);
 		CreatureVector* creatures = makeCreatures();
-		creatures->insert(creatures->begin(), creature);
+		creatures->insert(creatures->end(), creature);
 	} else {
 		Item* item = thing->getItem();
 		if (item == nullptr) {
@@ -1398,7 +1414,7 @@ void Tile::internalAddThing(uint32_t, Thing* thing)
 		}
 
 		CreatureVector* creatures = makeCreatures();
-		creatures->insert(creatures->begin(), creature);
+		creatures->insert(creatures->end(), creature);
 	} else {
 		Item* item = thing->getItem();
 		if (item == nullptr) {
@@ -1498,6 +1514,10 @@ void Tile::setTileFlags(const Item* item)
 	if (item->hasProperty(CONST_PROP_SUPPORTHANGABLE)) {
 		setFlag(TILESTATE_SUPPORTS_HANGABLE);
 	}
+
+	if (item->hasProperty(CONST_PROP_HASHEIGHT) && height < 3) {
+		height++;
+	}
 }
 
 void Tile::resetTileFlags(const Item* item)
@@ -1558,6 +1578,10 @@ void Tile::resetTileFlags(const Item* item)
 
 	if (item->hasProperty(CONST_PROP_SUPPORTHANGABLE)) {
 		resetFlag(TILESTATE_SUPPORTS_HANGABLE);
+	}
+
+	if (item->hasProperty(CONST_PROP_HASHEIGHT) && height > 0) {
+		height--;
 	}
 }
 

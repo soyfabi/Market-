@@ -71,8 +71,8 @@ WeaponAction_t getWeaponAction(const std::string& strValue);
 Skulls_t getSkullType(const std::string& strValue);
 std::string getCombatName(CombatType_t combatType);
 
-std::string getSkillName(uint8_t skillid);
 std::string getSpecialSkillName(uint8_t skillid);
+std::string getSkillName(uint8_t skillid);
 
 uint32_t adlerChecksum(const uint8_t* data, size_t length);
 
@@ -95,5 +95,11 @@ const char* getReturnMessage(ReturnValue value);
 int64_t OTSYS_TIME();
 
 SpellGroup_t stringToSpellGroup(const std::string& value);
+
+template <typename E>
+auto format_as(E e)
+{
+	return fmt::underlying(e);
+}
 
 #endif

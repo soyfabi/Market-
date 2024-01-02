@@ -184,9 +184,25 @@ bool ConfigManager::load()
 		boolean[BIND_ONLY_GLOBAL_ADDRESS] = getGlobalBoolean(L, "bindOnlyGlobalAddress", false);
 		boolean[OPTIMIZE_DATABASE] = getGlobalBoolean(L, "startupDatabaseOptimization", true);
 
-		if (string[IP_STRING] == "") {
-			string[IP_STRING] = getGlobalString(L, "ip", "127.0.0.1");
+		if (string[IP] == "") {
+			string[IP] = getGlobalString(L, "ip", "127.0.0.1");
 		}
+
+		uint32_t ip = inet_addr(string[IP].c_str());
+		if (ip == INADDR_NONE) {
+			hostent* hostname = gethostbyname(string[IP].c_str());
+			if (hostname) {
+				ip = inet_addr(std::string(inet_ntoa(**(in_addr**)hostname->h_addr_list)).c_str());
+			}
+		}
+
+		if (ip == INADDR_NONE) {
+			std::cout << "[Error - ConfigManager::load] cannot resolve given ip address, make sure you typed correct IP or hostname." << std::endl;
+			lua_close(L);
+			return false;
+		}
+
+		integer[IP_NUM] = ip;
 
 		string[MAP_NAME] = getGlobalString(L, "mapName", "forgotten");
 		string[MAP_AUTHOR] = getGlobalString(L, "mapAuthor", "Unknown");
@@ -197,23 +213,6 @@ bool ConfigManager::load()
 		string[MYSQL_DB] = getGlobalString(L, "mysqlDatabase", "forgottenserver");
 		string[MYSQL_SOCK] = getGlobalString(L, "mysqlSock", "");
 
-		std::string ipString = string[IP_STRING];
-		uint32_t ip = inet_addr(ipString.c_str());
-		if (ip == INADDR_NONE) {
-			hostent* hostname = gethostbyname(ipString.c_str());
-			if (hostname) {
-				ipString = std::string(inet_ntoa(**(in_addr**)hostname->h_addr_list));
-				ip = inet_addr(ipString.c_str());
-			}
-		}
-
-		if (ip == INADDR_NONE) {
-			std::cout << "[Error - ConfigManager::load] cannot resolve given ip address, make sure you typed correct IP or hostname." << std::endl;
-			lua_close(L);
-			return false;
-		}
-
-		integer[IP] = ip;
 		integer[SQL_PORT] = getGlobalNumber(L, "mysqlPort", 3306);
 
 		if (integer[GAME_PORT] == 0) {
@@ -225,6 +224,8 @@ bool ConfigManager::load()
 		}
 
 		integer[STATUS_PORT] = getGlobalNumber(L, "statusProtocolPort", 7171);
+
+		integer[MARKET_OFFER_DURATION] = getGlobalNumber(L, "marketOfferDuration", 30 * 24 * 60 * 60);
 	}
 
 	boolean[ALLOW_CHANGEOUTFIT] = getGlobalBoolean(L, "allowChangeOutfit", true);
@@ -234,12 +235,12 @@ bool ConfigManager::load()
 	boolean[REMOVE_WEAPON_AMMO] = getGlobalBoolean(L, "removeWeaponAmmunition", true);
 	boolean[REMOVE_WEAPON_CHARGES] = getGlobalBoolean(L, "removeWeaponCharges", true);
 	boolean[REMOVE_POTION_CHARGES] = getGlobalBoolean(L, "removeChargesFromPotions", true);
-	boolean[PZLOCK_SKULL_ATTACKER] = getGlobalBoolean(L, "pzLockSkullAttacker", false);
 	boolean[EXPERIENCE_FROM_PLAYERS] = getGlobalBoolean(L, "experienceByKillingPlayers", false);
 	boolean[FREE_PREMIUM] = getGlobalBoolean(L, "freePremium", false);
 	boolean[REPLACE_KICK_ON_LOGIN] = getGlobalBoolean(L, "replaceKickOnLogin", true);
 	boolean[ALLOW_CLONES] = getGlobalBoolean(L, "allowClones", false);
 	boolean[ALLOW_WALKTHROUGH] = getGlobalBoolean(L, "allowWalkthrough", true);
+	boolean[MARKET_PREMIUM] = getGlobalBoolean(L, "premiumToCreateMarketOffer", true);
 	boolean[EMOTE_SPELLS] = getGlobalBoolean(L, "emoteSpells", false);
 	boolean[STAMINA_SYSTEM] = getGlobalBoolean(L, "staminaSystem", true);
 	boolean[WARN_UNSAFE_SCRIPTS] = getGlobalBoolean(L, "warnUnsafeScripts", true);
@@ -297,6 +298,8 @@ bool ConfigManager::load()
 	integer[WHITE_SKULL_TIME] = getGlobalNumber(L, "whiteSkullTime", 15 * 60);
 	integer[STAIRHOP_DELAY] = getGlobalNumber(L, "stairJumpExhaustion", 2000);
 	integer[EXP_FROM_PLAYERS_LEVEL_RANGE] = getGlobalNumber(L, "expFromPlayersLevelRange", 75);
+	integer[CHECK_EXPIRED_MARKET_OFFERS_EACH_MINUTES] = getGlobalNumber(L, "checkExpiredMarketOffersEachMinutes", 60);
+	integer[MAX_MARKET_OFFERS_AT_A_TIME_PER_PLAYER] = getGlobalNumber(L, "maxMarketOffersAtATimePerPlayer", 100);
 	integer[MAX_PACKETS_PER_SECOND] = getGlobalNumber(L, "maxPacketsPerSecond", 25);
 	integer[SERVER_SAVE_NOTIFY_DURATION] = getGlobalNumber(L, "serverSaveNotifyDuration", 5);
 	integer[YELL_MINIMUM_LEVEL] = getGlobalNumber(L, "yellMinimumLevel", 2);
