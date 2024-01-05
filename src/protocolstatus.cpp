@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@ extern ConfigManager g_config;
 extern Game g_game;
 
 std::map<uint32_t, int64_t> ProtocolStatus::ipConnectMap;
-const uint64_t ProtocolStatus::start = OTSYS_TIME();
+const uint64_t ProtocolStatus::start = OTSYS_TIME(true);
 
 enum RequestedInfo_t : uint16_t {
 	REQUEST_BASIC_SERVER_INFO = 1 << 0,
@@ -117,7 +117,23 @@ void ProtocolStatus::sendStatusString()
 	owner.append_attribute("email") = g_config.getString(ConfigManager::OWNER_EMAIL).c_str();
 
 	pugi::xml_node players = tsqp.append_child("players");
-	players.append_attribute("online") = std::to_string(g_game.getPlayersOnline()).c_str();
+	uint32_t real = 0;
+	std::map<uint32_t, uint32_t> listIP;
+	for (const auto& it : g_game.getPlayers()) {
+		if (it.second->getIP() != 0) {
+			auto ip = listIP.find(it.second->getIP());
+			if (ip != listIP.end()) {
+				listIP[it.second->getIP()]++;
+				if (listIP[it.second->getIP()] < 5) {
+					real++;
+				}
+			} else {
+				listIP[it.second->getIP()] = 1;
+				real++;
+			}
+		}
+	}
+	players.append_attribute("online") = std::to_string(real).c_str();
 	players.append_attribute("max") = std::to_string(g_config.getNumber(ConfigManager::MAX_PLAYERS)).c_str();
 	players.append_attribute("peak") = std::to_string(g_game.getPlayersRecord()).c_str();
 

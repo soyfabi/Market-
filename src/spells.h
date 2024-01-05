@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -51,13 +51,21 @@ class Spells final : public BaseEvents
 		InstantSpell* getInstantSpell(const std::string& words);
 		InstantSpell* getInstantSpellByName(const std::string& name);
 
-		TalkActionResult_t playerSaySpell(Player* player, std::string& words);
+		InstantSpell* getInstantSpellById(uint32_t spellId);
+
+		TalkActionResult_t playerSaySpell(Player* player, std::string& words, bool called = true);
 
 		static Position getCasterPosition(Creature* creature, Direction dir);
 		std::string getScriptBaseName() const override;
 
+		std::list<uint16_t> getSpellsByVocation(uint16_t vocationId);
+
 		const std::map<std::string, InstantSpell>& getInstantSpells() const {
 			return instants;
+		};
+
+		const std::map<uint16_t, RuneSpell>& getRuneSpells() const{
+				return runes;
 		};
 
 		void clearMaps(bool fromLua);
@@ -77,6 +85,8 @@ class Spells final : public BaseEvents
 		LuaScriptInterface scriptInterface { "Spell Interface" };
 };
 
+using RuneSpellFunction = std::function<bool(const RuneSpell* spell, Player* player, const Position& posTo)>;
+
 class BaseSpell
 {
 	public:
@@ -90,7 +100,8 @@ class BaseSpell
 class CombatSpell final : public Event, public BaseSpell
 {
 	public:
-		CombatSpell(Combat_ptr combat, bool needTarget, bool needDirection);
+		CombatSpell(Combat* combat, bool needTarget, bool needDirection);
+		~CombatSpell();
 
 		// non-copyable
 		CombatSpell(const CombatSpell&) = delete;
@@ -106,7 +117,7 @@ class CombatSpell final : public Event, public BaseSpell
 		bool executeCastSpell(Creature* creature, const LuaVariant& var);
 
 		bool loadScriptCombat();
-		Combat_ptr getCombat() {
+		Combat* getCombat() {
 			return combat;
 		}
 
@@ -115,7 +126,7 @@ class CombatSpell final : public Event, public BaseSpell
 			return "onCastSpell";
 		}
 
-		Combat_ptr combat;
+		Combat* combat;
 
 		bool needDirection;
 		bool needTarget;
@@ -283,12 +294,6 @@ class Spell : public BaseSpell
 		void setAggressive(bool a) {
 			aggressive = a;
 		}
-		bool getPzLock() const {
-			return pzLock;
-		}
-		void setPzLock(bool pzLock) {
-			this->pzLock = pzLock;
-		}
 
 		SpellType_t spellType = SPELL_UNDEFINED;
 
@@ -315,6 +320,7 @@ class Spell : public BaseSpell
 		bool needTarget = false;
 
 	private:
+
 		uint32_t mana = 0;
 		uint32_t manaPercent = 0;
 		uint32_t soul = 0;
@@ -323,11 +329,12 @@ class Spell : public BaseSpell
 		bool blockingSolid = false;
 		bool blockingCreature = false;
 		bool aggressive = true;
-		bool pzLock = false;
 		bool learnable = false;
 		bool enabled = true;
 		bool premium = false;
 
+
+	private:
 		std::string name;
 };
 
@@ -400,6 +407,8 @@ class RuneSpell final : public Action, public Spell
 		explicit RuneSpell(LuaScriptInterface* interface) : Action(interface) {}
 
 		bool configureEvent(const pugi::xml_node& node) override;
+
+		bool canUseRune(const Player* player, bool ignoreLevel=false);
 
 		ReturnValue canExecuteAction(const Player* player, const Position& toPos) override;
 		bool hasOwnErrorHandler() override {

@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 #define FS_PROTOCOL_H_D71405071ACF4137A4B1203899DE80E1
 
 #include "connection.h"
-#include "xtea.h"
 
 class Protocol : public std::enable_shared_from_this<Protocol>
 {
@@ -33,9 +32,14 @@ class Protocol : public std::enable_shared_from_this<Protocol>
 		Protocol(const Protocol&) = delete;
 		Protocol& operator=(const Protocol&) = delete;
 
+		enum ChecksumMethods_t : uint8_t {
+			CHECKSUM_METHOD_NONE,
+			CHECKSUM_METHOD_ADLER32,
+			CHECKSUM_METHOD_SEQUENCE
+		};
 		virtual void parsePacket(NetworkMessage&) {}
 
-		virtual void onSendMessage(const OutputMessage_ptr& msg) const;
+		virtual void onSendMessage(const OutputMessage_ptr& msg);
 		void onRecvMessage(NetworkMessage& msg);
 		virtual void onRecvFirstMessage(NetworkMessage& msg) = 0;
 		virtual void onConnect() {}
@@ -72,13 +76,21 @@ class Protocol : public std::enable_shared_from_this<Protocol>
 		void enableXTEAEncryption() {
 			encryptionEnabled = true;
 		}
-		void setXTEAKey(const xtea::key& key) {
-			this->key = xtea::expand_key(key);
+		void setXTEAKey(const uint32_t* key) {
+			memcpy(this->key, key, sizeof(*key) * 4);
 		}
-		void disableChecksum() {
-			checksumEnabled = false;
+		void setChecksumMethod(ChecksumMethods_t method) {
+			checksumMethod = method;
+		}
+		void enableCompact() {
+			compactCrypt = true;
+		}
+		bool isCompact() {
+			return compactCrypt;
 		}
 
+		void XTEA_encrypt(OutputMessage& msg) const;
+		bool XTEA_decrypt(NetworkMessage& msg) const;
 		static bool RSA_decrypt(NetworkMessage& msg);
 
 		void setRawMessages(bool value) {
@@ -86,16 +98,16 @@ class Protocol : public std::enable_shared_from_this<Protocol>
 		}
 
 		virtual void release() {}
-
-	private:
 		friend class Connection;
 
 		OutputMessage_ptr outputBuffer;
-
+	private:
 		const ConnectionWeak_ptr connection;
-		xtea::round_keys key;
+		uint32_t key[4] = {};
+		uint32_t sequenceNumber = 0;
 		bool encryptionEnabled = false;
-		bool checksumEnabled = false;
+		std::underlying_type<ChecksumMethods_t>::type checksumMethod = CHECKSUM_METHOD_NONE;
+		bool compactCrypt = false;
 		bool rawMessages = false;
 };
 

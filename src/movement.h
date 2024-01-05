@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -66,6 +66,8 @@ class MoveEvents final : public BaseEvents
 		uint32_t onItemMove(Item* item, Tile* tile, bool isAdd);
 
 		MoveEvent* getEvent(Item* item, MoveEvent_t eventType);
+
+		bool isRegistered(uint32_t itemid);
 
 		bool registerLuaEvent(MoveEvent* event);
 		bool registerLuaFunction(MoveEvent* event);
@@ -160,41 +162,35 @@ class MoveEvent final : public Event
 		void setTileItem(bool b) {
 			tileItem = b;
 		}
-		void clearItemIdRange() {
-			return itemIdRange.clear();
-		}
-		const std::vector<uint32_t>& getItemIdRange() const {
+		std::vector<uint32_t> getItemIdRange() {
 			return itemIdRange;
 		}
 		void addItemId(uint32_t id) {
 			itemIdRange.emplace_back(id);
 		}
-		void clearActionIdRange() {
-			return actionIdRange.clear();
-		}
-		const std::vector<uint32_t>& getActionIdRange() const {
+		std::vector<uint32_t> getActionIdRange() {
 			return actionIdRange;
 		}
 		void addActionId(uint32_t id) {
 			actionIdRange.emplace_back(id);
 		}
-		void clearUniqueIdRange() {
-			return uniqueIdRange.clear();
-		}
-		const std::vector<uint32_t>& getUniqueIdRange() const {
+		std::vector<uint32_t> getUniqueIdRange() {
 			return uniqueIdRange;
 		}
 		void addUniqueId(uint32_t id) {
 			uniqueIdRange.emplace_back(id);
 		}
-		void clearPosList() {
-			return posList.clear();
-		}
-		const std::vector<Position>& getPosList() const {
+		std::vector<Position> getPosList() {
 			return posList;
 		}
 		void addPosList(Position pos) {
 			posList.emplace_back(pos);
+		}
+		std::string getSlotName() {
+			return slotName;
+		}
+		void setSlotName(std::string name) {
+			slotName = name;
 		}
 		void setSlot(uint32_t s) {
 			slot = s;
@@ -230,8 +226,8 @@ class MoveEvent final : public Event
 		static uint32_t AddItemField(Item* item, Item* tileItem, const Position& pos);
 		static uint32_t RemoveItemField(Item* item, Item* tileItem, const Position& pos);
 
-		static ReturnValue EquipItem(MoveEvent* moveEvent, Player* player, Item* item, slots_t slot, bool isCheck);
-		static ReturnValue DeEquipItem(MoveEvent* moveEvent, Player* player, Item* item, slots_t slot, bool);
+		static ReturnValue EquipItem(MoveEvent* moveEvent, Player* player, Item* item, slots_t slot, bool boolean);
+		static ReturnValue DeEquipItem(MoveEvent* moveEvent, Player* player, Item* item, slots_t slot, bool boolean);
 
 		MoveEvent_t eventType = MOVE_EVENT_NONE;
 		StepFunction stepFunction;
@@ -242,6 +238,7 @@ class MoveEvent final : public Event
 		std::string getScriptEventName() const override;
 
 		uint32_t slot = SLOTP_WHEREEVER;
+		std::string slotName;
 
 		//onEquip information
 		uint32_t reqLevel = 0;

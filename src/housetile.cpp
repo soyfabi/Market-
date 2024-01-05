@@ -22,10 +22,8 @@
 #include "housetile.h"
 #include "house.h"
 #include "game.h"
-#include "configmanager.h"
 
 extern Game g_game;
-extern ConfigManager g_config;
 
 HouseTile::HouseTile(int32_t x, int32_t y, int32_t z, House* house) :
 	DynamicTile(x, y, z), house(house) {}
@@ -33,19 +31,6 @@ HouseTile::HouseTile(int32_t x, int32_t y, int32_t z, House* house) :
 void HouseTile::addThing(int32_t index, Thing* thing)
 {
 	Tile::addThing(index, thing);
-
-	if (!thing->getParent()) {
-		return;
-	}
-
-	if (Item* item = thing->getItem()) {
-		updateHouse(item);
-	}
-}
-
-void HouseTile::internalAddThing(uint32_t index, Thing* thing)
-{
-	Tile::internalAddThing(index, thing);
 
 	if (!thing->getParent()) {
 		return;
@@ -82,19 +67,21 @@ ReturnValue HouseTile::queryAdd(int32_t index, const Thing& thing, uint32_t coun
 			if (!house->isInvited(player)) {
 				return RETURNVALUE_PLAYERISNOTINVITED;
 			}
-		} else {
+		}else if(const Monster* monster = creature->getMonster()){			
+			if(monster->getMaster() != nullptr && monster->isPet()){
+				if (const Player* master = monster->getMaster()->getPlayer()){
+					if (!house->isInvited(master)){
+						return RETURNVALUE_PLAYERISNOTINVITED;
+					}
+				}
+			}
+		}else{
 			return RETURNVALUE_NOTPOSSIBLE;
 		}
-	} else if (const Item* item = thing.getItem()) {
-		/*if (item->isStoreItem() && !item->hasAttribute(ITEM_ATTRIBUTE_WRAPID)) {
-			return RETURNVALUE_ITEMCANNOTBEMOVEDTHERE;
-		}*/
-
-		if (actor) {
-			Player* actorPlayer = actor->getPlayer();
-			if (!house->isInvited(actorPlayer)) {
-				return RETURNVALUE_CANNOTTHROW;
-			}
+	} else if (thing.getItem() && actor) {
+		Player* actorPlayer = actor->getPlayer();
+		if (!house->isInvited(actorPlayer)) {
+			return RETURNVALUE_CANNOTTHROW;
 		}
 	}
 	return Tile::queryAdd(index, thing, count, flags, actor);
@@ -127,20 +114,4 @@ Tile* HouseTile::queryDestination(int32_t& index, const Thing& thing, Item** des
 	}
 
 	return Tile::queryDestination(index, thing, destItem, flags);
-}
-
-ReturnValue HouseTile::queryRemove(const Thing& thing, uint32_t count, uint32_t flags, Creature* actor /*= nullptr*/) const
-{
-	const Item* item = thing.getItem();
-	if (!item) {
-		return RETURNVALUE_NOTPOSSIBLE;
-	}
-
-	if (actor && g_config.getBoolean(ConfigManager::ONLY_INVITED_CAN_MOVE_HOUSE_ITEMS)) {
-		Player* actorPlayer = actor->getPlayer();
-		if (!house->isInvited(actorPlayer)) {
-			return RETURNVALUE_NOTPOSSIBLE;
-		}
-	}
-	return Tile::queryRemove(thing, count, flags);
 }

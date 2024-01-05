@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,10 +49,6 @@ struct Position
 	template<int_fast32_t deltax, int_fast32_t deltay, int_fast16_t deltaz>
 	static bool areInRange(const Position& p1, const Position& p2) {
 		return Position::getDistanceX(p1, p2) <= deltax && Position::getDistanceY(p1, p2) <= deltay && Position::getDistanceZ(p1, p2) <= deltaz;
-	}
-
-	static bool areInRange(const Position& p1, const Position& p2, int_fast32_t deltax, int_fast32_t deltay) {
-		return Position::getDistanceX(p1, p2) <= deltax && Position::getDistanceY(p1, p2) <= deltay;
 	}
 
 	static int_fast32_t getOffsetX(const Position& p1, const Position& p2) {

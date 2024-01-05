@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include <unordered_set>
 
 #include "networkmessage.h"
+#include "tools.h"
 
 static constexpr int32_t CONNECTION_WRITE_TIMEOUT = 30;
 static constexpr int32_t CONNECTION_READ_TIMEOUT = 30;
@@ -52,7 +53,7 @@ class ConnectionManager
 		void releaseConnection(const Connection_ptr& connection);
 		void closeAll();
 
-	private:
+	protected:
 		ConnectionManager() = default;
 
 		std::unordered_set<Connection_ptr> connections;
@@ -66,15 +67,30 @@ class Connection : public std::enable_shared_from_this<Connection>
 		Connection(const Connection&) = delete;
 		Connection& operator=(const Connection&) = delete;
 
+		enum ConnectionState_t : int8_t {
+			CONNECTION_STATE_DISCONNECTED,
+			CONNECTION_STATE_CONNECTING_STAGE1,
+			CONNECTION_STATE_CONNECTING_STAGE2,
+			CONNECTION_STATE_GAME,
+			CONNECTION_STATE_PENDING
+		};
+
 		enum { FORCE_CLOSE = true };
 
 		Connection(boost::asio::io_service& io_service,
-		ConstServicePort_ptr service_port) :
+			ConstServicePort_ptr service_port) :
 			readTimer(io_service),
 			writeTimer(io_service),
 			service_port(std::move(service_port)),
-			socket(io_service),
-			timeConnected(time(nullptr)) {}
+			socket(io_service) {
+			connectionState = CONNECTION_STATE_PENDING;
+			packetsSent = 0;
+			timeConnected = OS_TIME(nullptr);
+			receivedFirst = false;
+			serverNameTime = 0;
+			receivedName = false;
+			receivedLastChar = false;
+		}
 		~Connection();
 
 		friend class ConnectionManager;
@@ -105,9 +121,11 @@ class Connection : public std::enable_shared_from_this<Connection>
 		friend class ServicePort;
 
 		NetworkMessage msg;
+		void broadcastMessage(OutputMessage_ptr msg);
+		void dispatchBroadcastMessage(const OutputMessage_ptr& msg);
 
-		boost::asio::steady_timer readTimer;
-		boost::asio::steady_timer writeTimer;
+		boost::asio::deadline_timer readTimer;
+		boost::asio::deadline_timer writeTimer;
 
 		std::recursive_mutex connectionLock;
 
@@ -119,10 +137,18 @@ class Connection : public std::enable_shared_from_this<Connection>
 		boost::asio::ip::tcp::socket socket;
 
 		time_t timeConnected;
-		uint32_t packetsSent = 0;
+		uint32_t packetsSent;
 
-		bool closed = false;
-		bool receivedFirst = false;
+		int8_t connectionState;
+		bool receivedFirst;
+
+		uint32_t serverNameTime;
+		bool receivedName;
+		bool receivedLastChar;
+
+		std::unordered_map<uint32_t , uint32_t> checksumsMap;
+
+		bool detectAttack(const uint32_t currentPacketChecksum);
 };
 
 #endif

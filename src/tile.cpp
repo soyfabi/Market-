@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,21 +19,24 @@
 
 #include "otpch.h"
 
+#include <boost/range/adaptor/reversed.hpp>
+
 #include "tile.h"
 
 #include "creature.h"
 #include "combat.h"
 #include "game.h"
+#include "configmanager.h"
 #include "mailbox.h"
 #include "monster.h"
 #include "movement.h"
 #include "teleport.h"
 #include "trashholder.h"
-#include "configmanager.h"
+#include "housetile.h"
 
 extern Game g_game;
-extern MoveEvents* g_moveEvents;
 extern ConfigManager g_config;
+extern MoveEvents* g_moveEvents;
 
 StaticTile real_nullptr_tile(0xFFFF, 0xFFFF, 0xFF);
 Tile& Tile::nullptr_tile = real_nullptr_tile;
@@ -70,6 +73,34 @@ bool Tile::hasProperty(const Item* exclude, ITEMPROPERTY prop) const
 		}
 	}
 
+	return false;
+}
+
+bool Tile::hasHeight(uint32_t n) const
+{
+	uint32_t height = 0;
+
+	if (ground) {
+		if (ground->hasProperty(CONST_PROP_HASHEIGHT)) {
+			++height;
+		}
+
+		if (n == height) {
+			return true;
+		}
+	}
+
+	if (const TileItemVector* items = getItemList()) {
+		for (const Item* item : *items) {
+			if (item->hasProperty(CONST_PROP_HASHEIGHT)) {
+				++height;
+			}
+
+			if (n == height) {
+				return true;
+			}
+		}
+	}
 	return false;
 }
 
@@ -230,6 +261,11 @@ Creature* Tile::getTopVisibleCreature(const Creature* creature) const
 {
 	if (const CreatureVector* creatures = getCreatures()) {
 		if (creature) {
+			const Player* player = creature->getPlayer();
+			if (player && player->isAccessPlayer()) {
+				return getTopCreature();
+			}
+
 			for (Creature* tileCreature : *creatures) {
 				if (creature->canSeeCreature(tileCreature)) {
 					return tileCreature;
@@ -253,6 +289,11 @@ const Creature* Tile::getBottomVisibleCreature(const Creature* creature) const
 {
 	if (const CreatureVector* creatures = getCreatures()) {
 		if (creature) {
+			const Player* player = creature->getPlayer();
+			if (player && player->isAccessPlayer()) {
+				return getBottomCreature();
+			}
+
 			for (auto it = creatures->rbegin(), end = creatures->rend(); it != end; ++it) {
 				if (creature->canSeeCreature(*it)) {
 					return *it;
@@ -334,19 +375,19 @@ Thing* Tile::getTopVisibleThing(const Creature* creature)
 
 void Tile::onAddTileItem(Item* item)
 {
-	/*if (item->hasProperty(CONST_PROP_MOVEABLE) || item->getContainer()) {
+	if (item->hasProperty(CONST_PROP_MOVEABLE) || item->getContainer()) {
 		auto it = g_game.browseFields.find(this);
 		if (it != g_game.browseFields.end()) {
 			it->second->addItemBack(item);
-			item->setParent(it->second);
+			item->setParent(this);
 		}
-	}*/
+	}
 
 	setTileFlags(item);
 
 	const Position& cylinderMapPos = getPosition();
 
-	SpectatorVec spectators;
+	SpectatorHashSet spectators;
 	g_game.map.getSpectators(spectators, cylinderMapPos, true);
 
 	//send to client
@@ -360,12 +401,6 @@ void Tile::onAddTileItem(Item* item)
 	for (Creature* spectator : spectators) {
 		spectator->onAddTileItem(this, cylinderMapPos);
 	}
-
-	if ((!hasFlag(TILESTATE_PROTECTIONZONE) || g_config.getBoolean(ConfigManager::CLEAN_PROTECTION_ZONES)) && item->isCleanable()) {
-		if (!dynamic_cast<HouseTile*>(this)) {
-			g_game.addTileToClean(this);
-		}
-	}
 }
 
 void Tile::onUpdateTileItem(Item* oldItem, const ItemType& oldType, Item* newItem, const ItemType& newType)
@@ -376,7 +411,7 @@ void Tile::onUpdateTileItem(Item* oldItem, const ItemType& oldType, Item* newIte
 			int32_t index = it->second->getThingIndex(oldItem);
 			if (index != -1) {
 				it->second->replaceThing(index, newItem);
-				newItem->setParent(it->second);
+				newItem->setParent(this);
 			}
 		}
 	} else if (oldItem->hasProperty(CONST_PROP_MOVEABLE) || oldItem->getContainer()) {
@@ -390,7 +425,7 @@ void Tile::onUpdateTileItem(Item* oldItem, const ItemType& oldType, Item* newIte
 
 	const Position& cylinderMapPos = getPosition();
 
-	SpectatorVec spectators;
+	SpectatorHashSet spectators;
 	g_game.map.getSpectators(spectators, cylinderMapPos, true);
 
 	//send to client
@@ -406,7 +441,7 @@ void Tile::onUpdateTileItem(Item* oldItem, const ItemType& oldType, Item* newIte
 	}
 }
 
-void Tile::onRemoveTileItem(const SpectatorVec& spectators, const std::vector<int32_t>& oldStackPosVector, Item* item)
+void Tile::onRemoveTileItem(const SpectatorHashSet& spectators, const std::vector<int32_t>& oldStackPosVector, Item* item)
 {
 	if (item->hasProperty(CONST_PROP_MOVEABLE) || item->getContainer()) {
 		auto it = g_game.browseFields.find(this);
@@ -432,29 +467,9 @@ void Tile::onRemoveTileItem(const SpectatorVec& spectators, const std::vector<in
 	for (Creature* spectator : spectators) {
 		spectator->onRemoveTileItem(this, cylinderMapPos, iType, item);
 	}
-
-	if (!hasFlag(TILESTATE_PROTECTIONZONE) || g_config.getBoolean(ConfigManager::CLEAN_PROTECTION_ZONES)) {
-		auto items = getItemList();
-		if (!items || items->empty()) {
-			g_game.removeTileToClean(this);
-			return;
-		}
-
-		bool ret = false;
-		for (auto toCheck : *items) {
-			if (toCheck->isCleanable()) {
-				ret = true;
-				break;
-			}
-		}
-
-		if (!ret) {
-			g_game.removeTileToClean(this);
-		}
-	}
 }
 
-void Tile::onUpdateTile(const SpectatorVec& spectators)
+void Tile::onUpdateTile(const SpectatorHashSet& spectators)
 {
 	const Position& cylinderMapPos = getPosition();
 
@@ -475,17 +490,19 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t flags
 			return RETURNVALUE_NOTPOSSIBLE;
 		}
 
-		if (ground == nullptr) {
+		if (creature->isMoveLocked() || ground == nullptr) {
 			return RETURNVALUE_NOTPOSSIBLE;
 		}
 
 		if (const Monster* monster = creature->getMonster()) {
-			if (hasFlag(TILESTATE_PROTECTIONZONE | TILESTATE_FLOORCHANGE | TILESTATE_TELEPORT)) {
+			if (hasFlag(TILESTATE_PROTECTIONZONE | TILESTATE_FLOORCHANGE | TILESTATE_TELEPORT) && !monster->isPet()) {
 				return RETURNVALUE_NOTPOSSIBLE;
 			}
 
 			const CreatureVector* creatures = getCreatures();
-			if (monster->canPushCreatures() && !monster->isSummon()) {
+			if (creatures && !creatures->empty() && monster->isPet()) {
+				return RETURNVALUE_NOTENOUGHROOM;
+			} else if (monster->canPushCreatures() && !monster->isSummon()) {
 				if (creatures) {
 					for (Creature* tileCreature : *creatures) {
 						if (tileCreature->getPlayer() && tileCreature->getPlayer()->isInGhostMode()) {
@@ -522,23 +539,21 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t flags
 			}
 
 			MagicField* field = getFieldItem();
-			if (!field || field->isBlocking() || field->getDamage() == 0) {
-				return RETURNVALUE_NOERROR;
-			}
+			if (field && !field->isBlocking() && field->getDamage() != 0) {
+				CombatType_t combatType = field->getCombatType();
 
-			CombatType_t combatType = field->getCombatType();
-
-			//There is 3 options for a monster to enter a magic field
-			//1) Monster is immune
-			if (!monster->isImmune(combatType)) {
-				//1) Monster is able to walk over field type
-				//2) Being attacked while random stepping will make it ignore field damages
-				if (hasBitSet(FLAG_IGNOREFIELDDAMAGE, flags)) {
-					if (!(monster->canWalkOnFieldType(combatType) || monster->isIgnoringFieldDamage())) {
+				//There is 3 options for a monster to enter a magic field
+				//1) Monster is immune
+				if (!monster->isImmune(combatType)) {
+					//1) Monster is able to walk over field type
+					//2) Being attacked while random stepping will make it ignore field damages
+					if (hasBitSet(FLAG_IGNOREFIELDDAMAGE, flags)) {
+						if (!(monster->canWalkOnFieldType(combatType) || monster->getIgnoreFieldDamage())) {
+							return RETURNVALUE_NOTPOSSIBLE;
+						}
+					} else {
 						return RETURNVALUE_NOTPOSSIBLE;
 					}
-				} else {
-					return RETURNVALUE_NOTPOSSIBLE;
 				}
 			}
 
@@ -555,19 +570,12 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t flags
 				}
 			}
 
-			const Tile* playerTile = player->getTile();
-			if (playerTile) {
-				uint32_t height = playerTile->getHeight();
-				if (player->getPosition().z == getPosition().z && height != 3 && height < getHeight() && height + 1 != getHeight()) {
-					return RETURNVALUE_NOTPOSSIBLE;
-				}
-			}
-
 			if (player->getParent() == nullptr && hasFlag(TILESTATE_NOLOGOUT)) {
 				//player is trying to login to a "no logout" tile
 				return RETURNVALUE_NOTPOSSIBLE;
 			}
 
+			const Tile* playerTile = player->getTile();
 			if (playerTile && player->isPzLocked()) {
 				if (!playerTile->hasFlag(TILESTATE_PVPZONE)) {
 					//player is trying to enter a pvp zone while being pz-locked
@@ -618,17 +626,13 @@ ReturnValue Tile::queryAdd(int32_t, const Thing& thing, uint32_t, uint32_t flags
 		}
 	} else if (const Item* item = thing.getItem()) {
 		const TileItemVector* items = getItemList();
-		if (items && items->size() >= 0xFFFF) {
+		if (items && items->size() >= 0x3E8) {
 			return RETURNVALUE_NOTPOSSIBLE;
 		}
 
 		if (hasBitSet(FLAG_NOLIMIT, flags)) {
 			return RETURNVALUE_NOERROR;
 		}
-
-		/*if (item->isStoreItem()) {
-			return RETURNVALUE_ITEMCANNOTBEMOVEDTHERE;
-		}*/
 
 		bool itemIsHangable = item->isHangable();
 		if (ground == nullptr && !itemIsHangable) {
@@ -699,7 +703,7 @@ ReturnValue Tile::queryMaxCount(int32_t, const Thing&, uint32_t count, uint32_t&
 	return RETURNVALUE_NOERROR;
 }
 
-ReturnValue Tile::queryRemove(const Thing& thing, uint32_t count, uint32_t flags, Creature* /*= nullptr */) const
+ReturnValue Tile::queryRemove(const Thing& thing, uint32_t count, uint32_t flags) const
 {
 	int32_t index = getThingIndex(&thing);
 	if (index == -1) {
@@ -828,14 +832,9 @@ void Tile::addThing(int32_t, Thing* thing)
 {
 	Creature* creature = thing->getCreature();
 	if (creature) {
-		g_game.map.clearSpectatorCache();
-		if (creature->getPlayer()) {
-			g_game.map.clearPlayersSpectatorCache();
-		}
-
 		creature->setParent(this);
 		CreatureVector* creatures = makeCreatures();
-		creatures->insert(creatures->end(), creature);
+		creatures->insert(creatures->begin(), creature);
 	} else {
 		Item* item = thing->getItem();
 		if (item == nullptr) {
@@ -1037,11 +1036,6 @@ void Tile::removeThing(Thing* thing, uint32_t count)
 		if (creatures) {
 			auto it = std::find(creatures->begin(), creatures->end(), thing);
 			if (it != creatures->end()) {
-				g_game.map.clearSpectatorCache();
-				if (creature->getPlayer()) {
-					g_game.map.clearPlayersSpectatorCache();
-				}
-
 				creatures->erase(it);
 			}
 		}
@@ -1062,7 +1056,7 @@ void Tile::removeThing(Thing* thing, uint32_t count)
 		ground->setParent(nullptr);
 		ground = nullptr;
 
-		SpectatorVec spectators;
+		SpectatorHashSet spectators;
 		g_game.map.getSpectators(spectators, getPosition(), true);
 		onRemoveTileItem(spectators, std::vector<int32_t>(spectators.size(), 0), item);
 		return;
@@ -1082,7 +1076,7 @@ void Tile::removeThing(Thing* thing, uint32_t count)
 
 		std::vector<int32_t> oldStackPosVector;
 
-		SpectatorVec spectators;
+		SpectatorHashSet spectators;
 		g_game.map.getSpectators(spectators, getPosition(), true);
 		for (Creature* spectator : spectators) {
 			if (Player* tmpPlayer = spectator->getPlayer()) {
@@ -1106,7 +1100,7 @@ void Tile::removeThing(Thing* thing, uint32_t count)
 		} else {
 			std::vector<int32_t> oldStackPosVector;
 
-			SpectatorVec spectators;
+			SpectatorHashSet spectators;
 			g_game.map.getSpectators(spectators, getPosition(), true);
 			for (Creature* spectator : spectators) {
 				if (Player* tmpPlayer = spectator->getPlayer()) {
@@ -1195,12 +1189,42 @@ int32_t Tile::getClientIndexOfCreature(const Player* player, const Creature* cre
 	}
 
 	if (const CreatureVector* creatures = getCreatures()) {
-		for (auto it = creatures->rbegin(), end = creatures->rend(); it != end; ++it) {
-			const Creature* c = (*it);
+		for (const Creature* c : boost::adaptors::reverse(*creatures)) {
 			if (c == creature) {
 				return n;
 			} else if (player->canSeeCreature(c)) {
 				++n;
+			}
+		}
+	}
+	return -1;
+}
+
+int32_t Tile::getStackposOfCreature(const Player* player, const Creature* creature) const
+{
+	int32_t n;
+	if (ground) {
+		n = 1;
+	} else {
+		n = 0;
+	}
+
+	const TileItemVector* items = getItemList();
+	if (items) {
+		n += items->getTopItemCount();
+		if (n >= 10) {
+			return -1;
+		}
+	}
+
+	if (const CreatureVector* creatures = getCreatures()) {
+		for (const Creature* c : boost::adaptors::reverse(*creatures)) {
+			if (c == creature) {
+				return n;
+			} else if (player->canSeeCreature(c)) {
+				if (++n >= 10) {
+					return -1;
+				}
 			}
 		}
 	}
@@ -1319,10 +1343,12 @@ Thing* Tile::getThing(size_t index) const
 
 void Tile::postAddNotification(Thing* thing, const Cylinder* oldParent, int32_t index, cylinderlink_t link /*= LINK_OWNER*/)
 {
-	SpectatorVec spectators;
+	SpectatorHashSet spectators;
 	g_game.map.getSpectators(spectators, getPosition(), true, true);
 	for (Creature* spectator : spectators) {
-		spectator->getPlayer()->postAddNotification(thing, oldParent, index, LINK_NEAR);
+		if (Player* tmpPlayer = spectator->getPlayer()) {
+			tmpPlayer->postAddNotification(thing, oldParent, index, LINK_NEAR);
+		}
 	}
 
 	//add a reference to this item, it may be deleted after being added (mailbox for example)
@@ -1374,7 +1400,7 @@ void Tile::postAddNotification(Thing* thing, const Cylinder* oldParent, int32_t 
 
 void Tile::postRemoveNotification(Thing* thing, const Cylinder* newParent, int32_t index, cylinderlink_t)
 {
-	SpectatorVec spectators;
+	SpectatorHashSet spectators;
 	g_game.map.getSpectators(spectators, getPosition(), true, true);
 
 	if (getThingCount() > 8) {
@@ -1400,6 +1426,31 @@ void Tile::postRemoveNotification(Thing* thing, const Cylinder* newParent, int32
 void Tile::internalAddThing(Thing* thing)
 {
 	internalAddThing(0, thing);
+	if (!thing->getParent()) {
+		return;
+	}
+
+	if (HouseTile* houseTile = dynamic_cast<HouseTile*>(thing->getTile())) {
+		if (Item* item = thing->getItem()) {
+			if (item->getParent() != this) {
+				return;
+			}
+
+			Door* door = item->getDoor();
+			House* house = houseTile->getHouse();
+			if (door) {
+				if (door->getDoorId() != 0) {
+					house->addDoor(door);
+				}
+			}
+			else {
+				BedItem* bed = item->getBed();
+				if (bed) {
+					house->addBed(bed);
+				}
+			}
+		}
+	}
 }
 
 void Tile::internalAddThing(uint32_t, Thing* thing)
@@ -1408,13 +1459,8 @@ void Tile::internalAddThing(uint32_t, Thing* thing)
 
 	Creature* creature = thing->getCreature();
 	if (creature) {
-		g_game.map.clearSpectatorCache();
-		if (creature->getPlayer()) {
-			g_game.map.clearPlayersSpectatorCache();
-		}
-
 		CreatureVector* creatures = makeCreatures();
-		creatures->insert(creatures->end(), creature);
+		creatures->insert(creatures->begin(), creature);
 	} else {
 		Item* item = thing->getItem();
 		if (item == nullptr) {
@@ -1514,10 +1560,6 @@ void Tile::setTileFlags(const Item* item)
 	if (item->hasProperty(CONST_PROP_SUPPORTHANGABLE)) {
 		setFlag(TILESTATE_SUPPORTS_HANGABLE);
 	}
-
-	if (item->hasProperty(CONST_PROP_HASHEIGHT) && height < 3) {
-		height++;
-	}
 }
 
 void Tile::resetTileFlags(const Item* item)
@@ -1579,10 +1621,6 @@ void Tile::resetTileFlags(const Item* item)
 	if (item->hasProperty(CONST_PROP_SUPPORTHANGABLE)) {
 		resetFlag(TILESTATE_SUPPORTS_HANGABLE);
 	}
-
-	if (item->hasProperty(CONST_PROP_HASHEIGHT) && height > 0) {
-		height--;
-	}
 }
 
 bool Tile::isMoveableBlocking() const
@@ -1599,6 +1637,25 @@ Item* Tile::getUseItem(int32_t index) const
 
 	if (Thing* thing = getThing(index)) {
 		return thing->getItem();
+	}
+
+	return nullptr;
+}
+
+Item* Tile::getDoorItem() const
+{
+	const TileItemVector* items = getItemList();
+	if (!items || items->size() == 0) {
+		return ground;
+	}
+
+	if (items) {
+		for (Item* item : *items) {
+			const ItemType& it = Item::items[item->getID()];
+			if (it.isDoor()) {
+				return item;
+			}
+		}
 	}
 
 	return nullptr;

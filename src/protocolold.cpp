@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,10 +23,10 @@
 #include "outputmessage.h"
 
 #include "game.h"
-
-#include <fmt/format.h>
+#include "configmanager.h"
 
 extern Game g_game;
+extern ConfigManager g_config;
 
 void ProtocolOld::disconnectClient(const std::string& message)
 {
@@ -50,7 +50,9 @@ void ProtocolOld::onRecvFirstMessage(NetworkMessage& msg)
 	msg.skipBytes(12);
 
 	if (version <= 760) {
-		disconnectClient(fmt::format("Only clients with protocol {:s} allowed!", CLIENT_VERSION_STR));
+		std::ostringstream ss;
+		ss << "Only clients with protocol " << g_config.getString(ConfigManager::VERSION_STR) << " allowed!";
+		disconnectClient(ss.str());
 		return;
 	}
 
@@ -59,17 +61,19 @@ void ProtocolOld::onRecvFirstMessage(NetworkMessage& msg)
 		return;
 	}
 
-	xtea::key key;
+	uint32_t key[4];
 	key[0] = msg.get<uint32_t>();
 	key[1] = msg.get<uint32_t>();
 	key[2] = msg.get<uint32_t>();
 	key[3] = msg.get<uint32_t>();
 	enableXTEAEncryption();
-	setXTEAKey(std::move(key));
+	setXTEAKey(key);
 
-	if (version <= 822) {
-		disableChecksum();
+	if (version >= 830) {
+		setChecksumMethod(CHECKSUM_METHOD_ADLER32);
 	}
 
-	disconnectClient(fmt::format("Only clients with protocol {:s} allowed!", CLIENT_VERSION_STR));
+	std::ostringstream ss;
+	ss << "Only clients with protocol " << g_config.getString(ConfigManager::VERSION_STR) << " allowed!";
+	disconnectClient(ss.str());
 }

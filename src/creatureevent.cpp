@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,15 +40,6 @@ void CreatureEvents::clear(bool fromLua)
 	reInitState(fromLua);
 }
 
-void CreatureEvents::removeInvalidEvents()
-{
-	for (auto it = creatureEvents.begin(); it != creatureEvents.end(); ++it) {
-		if (it->second.getScriptId() == 0) {
-			creatureEvents.erase(it->second.getName());
-		}
-	}
-}
-
 LuaScriptInterface& CreatureEvents::getScriptInterface()
 {
 	return scriptInterface;
@@ -78,16 +69,17 @@ bool CreatureEvents::registerEvent(Event_ptr event, const pugi::xml_node&)
 	CreatureEvent* oldEvent = getEventByName(creatureEvent->getName(), false);
 	if (oldEvent) {
 		//if there was an event with the same that is not loaded
-		//(happens when reloading), it is reused
+		//(happens when realoading), it is reused
 		if (!oldEvent->isLoaded() && oldEvent->getEventType() == creatureEvent->getEventType()) {
 			oldEvent->copyEvent(creatureEvent.get());
 		}
-		return false;
-	}
 
-	// if not, register it normally
-	creatureEvents.emplace(creatureEvent->getName(), std::move(*creatureEvent));
-	return true;
+		return false;
+	} else {
+		//if not, register it normally
+		creatureEvents.emplace(creatureEvent->getName(), std::move(*creatureEvent));
+		return true;
+	}
 }
 
 bool CreatureEvents::registerLuaEvent(CreatureEvent* event)
@@ -101,16 +93,17 @@ bool CreatureEvents::registerLuaEvent(CreatureEvent* event)
 	CreatureEvent* oldEvent = getEventByName(creatureEvent->getName(), false);
 	if (oldEvent) {
 		//if there was an event with the same that is not loaded
-		//(happens when reloading), it is reused
+		//(happens when realoading), it is reused
 		if (!oldEvent->isLoaded() && oldEvent->getEventType() == creatureEvent->getEventType()) {
 			oldEvent->copyEvent(creatureEvent.get());
 		}
-		return false;
-	}
 
-	// if not, register it normally
-	creatureEvents.emplace(creatureEvent->getName(), std::move(*creatureEvent));
-	return true;
+		return false;
+	} else {
+		//if not, register it normally
+		creatureEvents.emplace(creatureEvent->getName(), std::move(*creatureEvent));
+		return true;
+	}
 }
 
 CreatureEvent* CreatureEvents::getEventByName(const std::string& name, bool forceLoaded /*= true*/)
@@ -371,7 +364,7 @@ bool CreatureEvent::executeOnPrepareDeath(Creature* creature, Creature* killer)
 
 bool CreatureEvent::executeOnDeath(Creature* creature, Item* corpse, Creature* killer, Creature* mostDamageKiller, bool lastHitUnjustified, bool mostDamageUnjustified)
 {
-	//onDeath(creature, corpse, killer, mostDamageKiller, lastHitUnjustified, mostDamageUnjustified)
+	//onDeath(creature, corpse, lasthitkiller, mostdamagekiller, lasthitunjustified, mostdamageunjustified)
 	if (!scriptInterface->reserveScriptEnv()) {
 		std::cout << "[Error - CreatureEvent::executeOnDeath] Call stack overflow" << std::endl;
 		return false;

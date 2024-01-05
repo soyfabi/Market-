@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,17 +43,13 @@ class Event
 		bool isScripted() const {
 			return scripted;
 		}
-
+		
 		bool scripted = false;
 		bool fromLua = false;
-
-		int32_t getScriptId() {
-			return scriptId;
-		}
-
+		
 	protected:
 		virtual std::string getScriptEventName() const = 0;
-
+		
 		int32_t scriptId = 0;
 		LuaScriptInterface* scriptInterface = nullptr;
 };

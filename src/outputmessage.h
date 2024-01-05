@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,9 +43,9 @@ class OutputMessage : public NetworkMessage
 			add_header(info.length);
 		}
 
-		void addCryptoHeader(bool addChecksum) {
-			if (addChecksum) {
-				add_header(adlerChecksum(buffer + outputBufferStart, info.length));
+		void addCryptoHeader(bool addChecksum, uint32_t checksum) {
+			if (addChecksum == 1) {
+				add_header(checksum);
 			}
 
 			writeMessageLength();
@@ -65,7 +65,13 @@ class OutputMessage : public NetworkMessage
 			info.position += msgLen;
 		}
 
-	private:
+		bool isBroadcastMsg() const {
+			return isBroadcastMesssage;
+		}
+		void setBroadcastMsg(bool isBroadcastMesssage) {
+			this->isBroadcastMesssage = isBroadcastMesssage;
+		}
+	protected:
 		template <typename T>
 		void add_header(T add) {
 			assert(outputBufferStart >= sizeof(T));
@@ -76,6 +82,8 @@ class OutputMessage : public NetworkMessage
 		}
 
 		MsgSize_t outputBufferStart = INITIAL_BUFFER_POSITION;
+		bool isBroadcastMesssage = false;
+
 };
 
 class OutputMessagePool
@@ -90,6 +98,9 @@ class OutputMessagePool
 			return instance;
 		}
 
+		void sendAll();
+		void scheduleSendAll();
+
 		static OutputMessage_ptr getOutputMessage();
 
 		void addProtocolToAutosend(Protocol_ptr protocol);
@@ -100,5 +111,6 @@ class OutputMessagePool
 		//and relatively rarely modified (only when a client connects/disconnects)
 		std::vector<Protocol_ptr> bufferedProtocols;
 };
+
 
 #endif

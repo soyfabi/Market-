@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,10 +24,17 @@
 #include "game.h"
 
 #include "iomarket.h"
+#include "bestiary.h"
+#include "charm.h"
+#include "imbuements.h"
+#include "prey.h"
+#include "store.h"
 
 #include "configmanager.h"
 #include "scriptmanager.h"
 #include "rsa.h"
+#include "protocolcheck.h"
+#include "protocolspectator.h"
 #include "protocolold.h"
 #include "protocollogin.h"
 #include "protocolstatus.h"
@@ -35,11 +42,7 @@
 #include "scheduler.h"
 #include "databasetasks.h"
 #include "script.h"
-#include <fstream>
-#include <fmt/format.h>
-#if __has_include("gitmetadata.h")
-	#include "gitmetadata.h"
-#endif
+// TODO: #include "stdarg.h"
 
 DatabaseTasks g_databaseTasks;
 Dispatcher g_dispatcher;
@@ -51,6 +54,11 @@ Monsters g_monsters;
 Vocations g_vocations;
 extern Scripts* g_scripts;
 RSA g_RSA;
+Prey g_prey;
+Store g_store;
+Imbuements g_imbuements;
+Bestiaries g_bestiaries;
+Charms g_charms;
 
 std::mutex g_loaderLock;
 std::condition_variable g_loaderSignal;
@@ -62,10 +70,9 @@ void startupErrorMessage(const std::string& errorStr)
 	g_loaderSignal.notify_all();
 }
 
-void mainLoader(int argc, char* argv[], ServiceManager* services);
-bool argumentsHandler(const StringVector& args);
+void mainLoader(int argc, char* argv[], ServiceManager* servicer);
 
-[[noreturn]] void badAllocationHandler()
+void badAllocationHandler()
 {
 	// Use functions that only use stack allocation
 	puts("Allocation failed, server out of memory.\nDecrease the size of your map or compile in 64 bits mode.\n");
@@ -75,11 +82,6 @@ bool argumentsHandler(const StringVector& args);
 
 int main(int argc, char* argv[])
 {
-	StringVector args = StringVector(argv, argv + argc);
-	if(argc > 1 && !argumentsHandler(args)) {
-		return 0;
-	}
-
 	// Setup bad allocation handler
 	std::set_new_handler(badAllocationHandler);
 
@@ -105,24 +107,24 @@ int main(int argc, char* argv[])
 	g_scheduler.join();
 	g_databaseTasks.join();
 	g_dispatcher.join();
+	std::cout << ">> Saving player items." << std::endl;
 	return 0;
 }
 
-void printServerVersion()
+void mainLoader(int argc, char* argv[], ServiceManager* services)
 {
-#if defined(GIT_RETRIEVED_STATE) && GIT_RETRIEVED_STATE
-	std::cout << STATUS_SERVER_NAME << " - Version " << GIT_DESCRIBE << std::endl;
-	std::cout << "Git SHA1 " << GIT_SHORT_SHA1  << " dated " << GIT_COMMIT_DATE_ISO8601 << std::endl;
-	#if GIT_IS_DIRTY
-	std::cout << "*** DIRTY - NOT OFFICIAL RELEASE ***" << std::endl;
-	#endif
-#else
-	std::cout << STATUS_SERVER_NAME << " - Version " << STATUS_SERVER_VERSION << std::endl;
-#endif
-	std::cout << std::endl;
+	uint64_t starttime = OTSYS_TIME(true);
+	//dispatcher thread
+	g_game.setGameState(GAME_STATE_STARTUP);
 
-	std::cout << "Compiled with " << BOOST_COMPILER << std::endl;
+	srand(static_cast<unsigned int>(OTSYS_TIME(true)));
+#ifdef _WIN32
+	SetConsoleTitle(STATUS_SERVER_NAME);
+#endif
+	std::cout << "The " << STATUS_SERVER_NAME << " - Version: (" << STATUS_SERVER_VERSION <<  ")" << std::endl;
+	std::cout << "Compiled with: " << BOOST_COMPILER << std::endl;
 	std::cout << "Compiled on " << __DATE__ << ' ' << __TIME__ << " for platform ";
+
 #if defined(__amd64__) || defined(_M_X64)
 	std::cout << "x64" << std::endl;
 #elif defined(__i386__) || defined(_M_IX86) || defined(_X86_)
@@ -132,51 +134,24 @@ void printServerVersion()
 #else
 	std::cout << "unknown" << std::endl;
 #endif
-#if defined(LUAJIT_VERSION)
-	std::cout << "Linked with " << LUAJIT_VERSION << " for Lua support" << std::endl;
-#else
-	std::cout << "Linked with " << LUA_RELEASE << " for Lua support"  << std::endl;
-#endif
 	std::cout << std::endl;
 
-	std::cout << "A server developed by " << STATUS_SERVER_DEVELOPERS << std::endl;
-	std::cout << "A server downgraded by Nekiro" << std::endl;
-	std::cout << "Visit our forum for updates, support, and resources: https://otland.net/." << std::endl;
+	std::cout << "Engine Credits for: " << STATUS_SERVER_CREDITS << "." << std::endl;
+	std::cout << "A server developed by " << STATUS_SERVER_CONTRIBUTORS << "." << std::endl;
 	std::cout << std::endl;
-}
 
-void mainLoader(int, char*[], ServiceManager* services)
-{
-	//dispatcher thread
-	g_game.setGameState(GAME_STATE_STARTUP);
-
-	srand(static_cast<unsigned int>(OTSYS_TIME()));
-#ifdef _WIN32
-	SetConsoleTitle(STATUS_SERVER_NAME);
-#endif
-
-	printServerVersion();
-
-	// check if config.lua or config.lua.dist exist
-	const std::string& configFile = g_config.getString(ConfigManager::CONFIG_FILE);
-	std::ifstream c_test("./" + configFile);
-	if (!c_test.is_open()) {
-		std::ifstream config_lua_dist("./config.lua.dist");
-		if (config_lua_dist.is_open()) {
-			std::cout << ">> copying config.lua.dist to " << configFile << std::endl;
-			std::ofstream config_lua(configFile);
-			config_lua << config_lua_dist.rdbuf();
-			config_lua.close();
-			config_lua_dist.close();
+	// TODO: dirty for now; Use stdarg;
+	if (argc > 1) {
+		std::string param = { argv[1] };
+		if (param == "-c") {
+			g_config.setConfigFileLua(argv[2]);
 		}
-	} else {
-		c_test.close();
 	}
 
 	// read global config
-	std::cout << ">> Loading config" << std::endl;
+	std::cout << ">> Loading config: " << g_config.getConfigFileLua() << std::endl;
 	if (!g_config.load()) {
-		startupErrorMessage("Unable to load " + configFile + "!");
+		startupErrorMessage("Unable to load Config File!");
 		return;
 	}
 
@@ -190,12 +165,7 @@ void mainLoader(int, char*[], ServiceManager* services)
 #endif
 
 	//set RSA key
-	try {
-		g_RSA.loadPEM("key.pem");
-	} catch(const std::exception& e) {
-		startupErrorMessage(e.what());
-		return;
-	}
+	g_RSA.loadPEM("key.pem");
 
 	std::cout << ">> Establishing database connection..." << std::flush;
 
@@ -205,12 +175,11 @@ void mainLoader(int, char*[], ServiceManager* services)
 	}
 
 	std::cout << " MySQL " << Database::getClientVersion() << std::endl;
-
 	// run database manager
 	std::cout << ">> Running database manager" << std::endl;
 
 	if (!DatabaseManager::isDatabaseSetup()) {
-		startupErrorMessage("The database you have specified in config.lua is empty, please import the schema.sql to your database.");
+		startupErrorMessage("The database you have specified in config lua file is empty, please import the schema.sql to your database.");
 		return;
 	}
 	g_databaseTasks.start();
@@ -229,21 +198,34 @@ void mainLoader(int, char*[], ServiceManager* services)
 	}
 
 	// load item data
-	std::cout << ">> Loading items... ";
-	if (!Item::items.loadFromOtb("data/items/items.otb")) {
+	std::cout << ">> Loading items" << std::endl;
+	if (Item::items.loadFromOtb("data/items/items.otb") != ERROR_NONE) {
 		startupErrorMessage("Unable to load items (OTB)!");
 		return;
 	}
-	std::cout << fmt::format("OTB v{:d}.{:d}.{:d}", Item::items.majorVersion, Item::items.minorVersion, Item::items.buildNumber) << std::endl;
 
 	if (!Item::items.loadFromXml()) {
 		startupErrorMessage("Unable to load items (XML)!");
 		return;
 	}
 
+	// if (g_config.getBoolean(ConfigManager::PROTO_BUFF)) {
+	// 	if (!Item::items.loadFromProtobuf("appearances.dat")) {
+	// 		startupErrorMessage("Unable to load appearances.dat!");
+	// 		return;
+	// 	}
+	// }
+
 	std::cout << ">> Loading script systems" << std::endl;
 	if (!ScriptingManager::getInstance().loadScriptSystems()) {
 		startupErrorMessage("Failed to load script systems");
+		return;
+	}
+
+	// dando prioridade
+	std::cout << ">> Loading bestiary" << std::endl;
+	if (!g_bestiaries.loadFromXml()) {
+		startupErrorMessage("Unable to load Bestiaries!");
 		return;
 	}
 
@@ -271,6 +253,31 @@ void mainLoader(int, char*[], ServiceManager* services)
 		return;
 	}
 
+	std::cout << ">> Loading imbuements" << std::endl;
+	if (!g_imbuements.loadFromXml()) {
+		startupErrorMessage("Unable to load imbuements!");
+		return;
+	}
+
+	std::cout << ">> Loading charms" << std::endl;
+	if (!g_charms.loadFromXml()) {
+		startupErrorMessage("Unable to load Charms!");
+		return;
+	}
+
+
+	std::cout << ">> Loading Store" << std::endl;
+	if (!g_store.loadFromXml()) {
+		startupErrorMessage("Unable to load store!");
+		return;
+	}
+
+	std::cout << ">> Loading prey data" << std::endl;
+	if (!g_prey.loadFromXml()) {
+		startupErrorMessage("Unable to load prey data!");
+		return;
+	}
+
 	std::cout << ">> Checking world type... " << std::flush;
 	std::string worldType = asLowerCaseString(g_config.getString(ConfigManager::WORLD_TYPE));
 	if (worldType == "pvp") {
@@ -279,11 +286,17 @@ void mainLoader(int, char*[], ServiceManager* services)
 		g_game.setWorldType(WORLD_TYPE_NO_PVP);
 	} else if (worldType == "pvp-enforced") {
 		g_game.setWorldType(WORLD_TYPE_PVP_ENFORCED);
+	} else if (worldType == "retro-pvp") {
+		g_game.setWorldType(WORLD_TYPE_RETRO_OPEN_PVP);
 	} else {
 		std::cout << std::endl;
-		startupErrorMessage(fmt::format("Unknown world type: {:s}, valid world types are: pvp, no-pvp and pvp-enforced.", g_config.getString(ConfigManager::WORLD_TYPE)));
+
+		std::ostringstream ss;
+		ss << "> ERROR: Unknown world type: " << g_config.getString(ConfigManager::WORLD_TYPE) << ", valid world types are: pvp, no-pvp and pvp-enforced.";
+		startupErrorMessage(ss.str());
 		return;
 	}
+
 	std::cout << asUpperCaseString(worldType) << std::endl;
 
 	std::cout << ">> Loading map" << std::endl;
@@ -292,18 +305,32 @@ void mainLoader(int, char*[], ServiceManager* services)
 		return;
 	}
 
+	std::cout << ">> Loading guilds... " << std::flush;
+	if (g_game.loadGuilds()) {
+		std::cout << "All guilds have been loaded." << std::endl;
+	} else {
+		std::cout << "No guild to load." << std::endl;
+	}
+
 	std::cout << ">> Initializing gamestate" << std::endl;
 	g_game.setGameState(GAME_STATE_INIT);
 
 	// Game client protocols
 	services->add<ProtocolGame>(static_cast<uint16_t>(g_config.getNumber(ConfigManager::GAME_PORT)));
+	if (g_config.getBoolean(ConfigManager::ENABLE_LIVE_CASTING)) {
+		ProtocolGame::clearLiveCastInfo();
+		services->add<ProtocolSpectator>(static_cast<uint16_t>(g_config.getNumber(ConfigManager::LIVE_CAST_PORT)));
+	}
 	services->add<ProtocolLogin>(static_cast<uint16_t>(g_config.getNumber(ConfigManager::LOGIN_PORT)));
 
 	// OT protocols
 	services->add<ProtocolStatus>(static_cast<uint16_t>(g_config.getNumber(ConfigManager::STATUS_PORT)));
 
 	// Legacy login protocol
-	//services->add<ProtocolOld>(static_cast<uint16_t>(g_config.getNumber(ConfigManager::LOGIN_PORT)));
+	services->add<ProtocolOld>(static_cast<uint16_t>(g_config.getNumber(ConfigManager::LOGIN_PORT)));
+
+	// Site check protocol
+	services->add<ProtocolCheck>(static_cast<uint16_t>(g_config.getNumber(ConfigManager::CHECK_PORT)));
 
 	RentPeriod_t rentPeriod;
 	std::string strRentPeriod = asLowerCaseString(g_config.getString(ConfigManager::HOUSE_RENT_PERIOD));
@@ -322,8 +349,8 @@ void mainLoader(int, char*[], ServiceManager* services)
 
 	g_game.map.houses.payHouses(rentPeriod);
 
-	//IOMarket::checkExpiredOffers();
-	//IOMarket::getInstance().updateStatistics();
+	IOMarket::checkExpiredOffers();
+	IOMarket::getInstance().updateStatistics();
 
 	std::cout << ">> Loaded all modules, server starting up..." << std::endl;
 
@@ -336,36 +363,14 @@ void mainLoader(int, char*[], ServiceManager* services)
 	g_game.start(services);
 	g_game.setGameState(GAME_STATE_NORMAL);
 	g_loaderSignal.notify_all();
+
+	std::cout << ">> Server started in " << (OTSYS_TIME(true) - starttime) / (1000.) << " seconds." << std::endl;
 }
 
-bool argumentsHandler(const StringVector& args)
-{
-	for (const auto& arg : args) {
-		if (arg == "--help") {
-			std::clog << "Usage:\n"
-			"\n"
-			"\t--config=$1\t\tAlternate configuration file path.\n"
-			"\t--ip=$1\t\t\tIP address of the server.\n"
-			"\t\t\t\tShould be equal to the global IP.\n"
-			"\t--login-port=$1\tPort for login server to listen on.\n"
-			"\t--game-port=$1\tPort for game server to listen on.\n";
-			return false;
-		} else if (arg == "--version") {
-			printServerVersion();
-			return false;
-		}
-
-		StringVector tmp = explodeString(arg, "=");
-
-		if (tmp[0] == "--config")
-			g_config.setString(ConfigManager::CONFIG_FILE, tmp[1]);
-		else if (tmp[0] == "--ip")
-			g_config.setString(ConfigManager::IP, tmp[1]);
-		else if (tmp[0] == "--login-port")
-			g_config.setNumber(ConfigManager::LOGIN_PORT, std::stoi(tmp[1]));
-		else if (tmp[0] == "--game-port")
-			g_config.setNumber(ConfigManager::GAME_PORT, std::stoi(tmp[1]));
-	}
-
-	return true;
+#ifndef _WIN32
+__attribute__ ((used)) void saveServer() {
+	std::cout << "Server crash :O" << std::endl;
+	g_game.saveGameState(true);
+	g_game.saveServeMessage();
 }
+#endif

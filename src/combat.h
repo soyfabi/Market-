@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,9 +24,7 @@
 #include "condition.h"
 #include "map.h"
 #include "baseevents.h"
-
-#include <utility>
-#include <valarray>
+#include "monster.h"
 
 class Condition;
 class Creature;
@@ -41,7 +39,7 @@ class ValueCallback final : public CallBack
 		explicit ValueCallback(formulaType_t type): type(type) {}
 		void getMinMaxValues(Player* player, CombatDamage& damage) const;
 
-	private:
+	protected:
 		formulaType_t type;
 };
 
@@ -49,12 +47,18 @@ class TileCallback final : public CallBack
 {
 	public:
 		void onTileCombat(Creature* creature, Tile* tile) const;
+
+	protected:
+		formulaType_t type;
 };
 
 class TargetCallback final : public CallBack
 {
 	public:
 		void onTargetCombat(Creature* creature, Creature* target) const;
+
+	protected:
+		formulaType_t type;
 };
 
 struct CombatParams {
@@ -78,57 +82,159 @@ struct CombatParams {
 	bool targetCasterOrTopMost = false;
 	bool aggressive = true;
 	bool useCharges = false;
-	bool ignoreResistances = false;
 };
 
 class MatrixArea
 {
-	using Center = std::pair<uint32_t, uint32_t>;
-	using Container = std::valarray<bool>;
-
 	public:
-		MatrixArea() = default;
-		MatrixArea(uint32_t rows, uint32_t cols): arr(rows * cols), rows{rows}, cols{cols} {}
+		MatrixArea(uint32_t rows, uint32_t cols): centerX(0), centerY(0), rows(rows), cols(cols) {
+			data_ = new bool*[rows];
 
-		bool operator()(uint32_t row, uint32_t col) const { return arr[row * cols + col]; }
-		bool& operator()(uint32_t row, uint32_t col) { return arr[row * cols + col]; }
+			for (uint32_t row = 0; row < rows; ++row) {
+				data_[row] = new bool[cols];
 
-		void setCenter(uint32_t y, uint32_t x) { center = std::make_pair(x, y);	}
-		const Center& getCenter() const { return center; }
+				for (uint32_t col = 0; col < cols; ++col) {
+					data_[row][col] = 0;
+				}
+			}
+		}
 
-		uint32_t getRows() const { return rows; }
-		uint32_t getCols() const { return cols; }
+		MatrixArea(const MatrixArea& rhs) {
+			centerX = rhs.centerX;
+			centerY = rhs.centerY;
+			rows = rhs.rows;
+			cols = rhs.cols;
 
-		MatrixArea flip() const;
-		MatrixArea mirror() const;
-		MatrixArea transpose() const;
-		MatrixArea rotate90() const;
-		MatrixArea rotate180() const;
-		MatrixArea rotate270() const;
+			data_ = new bool*[rows];
 
-		operator bool() const { return rows == 0 || cols == 0; }
+			for (uint32_t row = 0; row < rows; ++row) {
+				data_[row] = new bool[cols];
 
-	private:
-		MatrixArea(Center center, uint32_t rows, uint32_t cols, Container&& arr):
-			arr{std::move(arr)}, center{std::move(center)}, rows{rows}, cols{cols} {}
+				for (uint32_t col = 0; col < cols; ++col) {
+					data_[row][col] = rhs.data_[row][col];
+				}
+			}
+		}
 
-		Container arr = {};
-		Center center = {};
-		uint32_t rows = 0, cols = 0;
+		~MatrixArea() {
+			for (uint32_t row = 0; row < rows; ++row) {
+				delete[] data_[row];
+			}
+
+			delete[] data_;
+		}
+
+		// non-assignable
+		MatrixArea& operator=(const MatrixArea&) = delete;
+
+		void setValue(uint32_t row, uint32_t col, bool value) const {
+			data_[row][col] = value;
+		}
+		bool getValue(uint32_t row, uint32_t col) const {
+			return data_[row][col];
+		}
+
+		void setCenter(uint32_t y, uint32_t x) {
+			centerX = x;
+			centerY = y;
+		}
+		void getCenter(uint32_t& y, uint32_t& x) const {
+			x = centerX;
+			y = centerY;
+		}
+
+		uint32_t getRows() const {
+			return rows;
+		}
+		uint32_t getCols() const {
+			return cols;
+		}
+
+		const bool* operator[](uint32_t i) const {
+			return data_[i];
+		}
+		bool* operator[](uint32_t i) {
+			return data_[i];
+		}
+
+	protected:
+		uint32_t centerX;
+		uint32_t centerY;
+
+		uint32_t rows;
+		uint32_t cols;
+		bool** data_;
 };
 
 class AreaCombat
 {
 	public:
-		void setupArea(const std::vector<uint32_t>& vec, uint32_t rows);
+		AreaCombat() = default;
+
+		AreaCombat(const AreaCombat& rhs);
+		~AreaCombat() {
+			clear();
+		}
+
+		// non-assignable
+		AreaCombat& operator=(const AreaCombat&) = delete;
+
+		void getList(const Position& centerPos, const Position& targetPos, std::forward_list<Tile*>& list) const;
+
+		void setupArea(const std::list<uint32_t>& list, uint32_t rows);
 		void setupArea(int32_t length, int32_t spread);
 		void setupArea(int32_t radius);
-		void setupAreaRing(int32_t ring);
-		void setupExtArea(const std::vector<uint32_t>& vec, uint32_t rows);
-		const MatrixArea& getArea(const Position& centerPos, const Position& targetPos) const;
+		void setupExtArea(const std::list<uint32_t>& list, uint32_t rows);
+		void clear();
 
-	private:
-		std::vector<MatrixArea> areas;
+	protected:
+		enum MatrixOperation_t {
+			MATRIXOPERATION_COPY,
+			MATRIXOPERATION_MIRROR,
+			MATRIXOPERATION_FLIP,
+			MATRIXOPERATION_ROTATE90,
+			MATRIXOPERATION_ROTATE180,
+			MATRIXOPERATION_ROTATE270,
+		};
+
+		MatrixArea* createArea(const std::list<uint32_t>& list, uint32_t rows);
+		void copyArea(const MatrixArea* input, MatrixArea* output, MatrixOperation_t op) const;
+
+		MatrixArea* getArea(const Position& centerPos, const Position& targetPos) const {
+			int32_t dx = Position::getOffsetX(targetPos, centerPos);
+			int32_t dy = Position::getOffsetY(targetPos, centerPos);
+
+			Direction dir;
+			if (dx < 0) {
+				dir = DIRECTION_WEST;
+			} else if (dx > 0) {
+				dir = DIRECTION_EAST;
+			} else if (dy < 0) {
+				dir = DIRECTION_NORTH;
+			} else {
+				dir = DIRECTION_SOUTH;
+			}
+
+			if (hasExtArea) {
+				if (dx < 0 && dy < 0) {
+					dir = DIRECTION_NORTHWEST;
+				} else if (dx > 0 && dy < 0) {
+					dir = DIRECTION_NORTHEAST;
+				} else if (dx < 0 && dy > 0) {
+					dir = DIRECTION_SOUTHWEST;
+				} else if (dx > 0 && dy > 0) {
+					dir = DIRECTION_SOUTHEAST;
+				}
+			}
+
+			auto it = areas.find(dir);
+			if (it == areas.end()) {
+				return nullptr;
+			}
+			return it->second;
+		}
+
+		std::map<Direction, MatrixArea*> areas;
 		bool hasExtArea = false;
 };
 
@@ -140,6 +246,8 @@ class Combat
 		// non-copyable
 		Combat(const Combat&) = delete;
 		Combat& operator=(const Combat&) = delete;
+
+		static void getCombatArea(const Position& centerPos, const Position& targetPos, const AreaCombat* area, std::forward_list<Tile*>& list);
 
 		static bool isInPvpZone(const Creature* attacker, const Creature* target);
 		static bool isProtected(const Player* attacker, const Player* target);
@@ -154,17 +262,18 @@ class Combat
 		static void addDistanceEffect(Creature* caster, const Position& fromPos, const Position& toPos, uint8_t effect);
 
 		void doCombat(Creature* caster, Creature* target) const;
-		void doCombat(Creature* caster, const Position& position) const;
+		void doCombat(Creature* caster, const Position& pos) const;
 
 		static void doTargetCombat(Creature* caster, Creature* target, CombatDamage& damage, const CombatParams& params);
 		static void doAreaCombat(Creature* caster, const Position& position, const AreaCombat* area, CombatDamage& damage, const CombatParams& params);
+
+		static void checkCriticalHit(Player* caster, CombatDamage& damage);
+		static void checkLeech(Player* caster, CombatDamage& damage, uint8_t affecteds = 1);
 
 		bool setCallback(CallBackParam_t key);
 		CallBack* getCallback(CallBackParam_t key);
 
 		bool setParam(CombatParam_t param, uint32_t value);
-		int32_t getParam(CombatParam_t param);
-
 		void setArea(AreaCombat* area) {
 			this->area.reset(area);
 		}
@@ -186,11 +295,11 @@ class Combat
 			params.origin = origin;
 		}
 
-	private:
-		static void combatTileEffects(const SpectatorVec& spectators, Creature* caster, Tile* tile, const CombatParams& params);
+	protected:
+		static void combatTileEffects(const SpectatorHashSet& spectators, Creature* caster, Tile* tile, const CombatParams& params);
 		CombatDamage getCombatDamage(Creature* creature, Creature* target) const;
 
-		//configurable
+		//configureable
 		CombatParams params;
 
 		//formula variables
@@ -208,10 +317,10 @@ class MagicField final : public Item
 	public:
 		explicit MagicField(uint16_t type) : Item(type), createTime(OTSYS_TIME()) {}
 
-		MagicField* getMagicField() override {
+		MagicField* getMagicField() final {
 			return this;
 		}
-		const MagicField* getMagicField() const override {
+		const MagicField* getMagicField() const final {
 			return this;
 		}
 

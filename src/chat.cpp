@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,8 +23,6 @@
 #include "game.h"
 #include "pugicast.h"
 #include "scheduler.h"
-
-#include <fmt/format.h>
 
 extern Chat* g_chat;
 extern Game g_game;
@@ -49,9 +47,13 @@ void PrivateChatChannel::invitePlayer(const Player& player, Player& invitePlayer
 		return;
 	}
 
-	invitePlayer.sendTextMessage(MESSAGE_INFO_DESCR, fmt::format("{:s} invites you to {:s} private chat channel.", player.getName(), player.getSex() == PLAYERSEX_FEMALE ? "her" : "his"));
+	std::ostringstream ss;
+	ss << player.getName() << " invites you to " << (player.getSex() == PLAYERSEX_FEMALE ? "her" : "his") << " private chat channel.";
+	invitePlayer.sendTextMessage(MESSAGE_INFO_DESCR, ss.str());
 
-	player.sendTextMessage(MESSAGE_INFO_DESCR, fmt::format("{:s} has been invited.", invitePlayer.getName()));
+	ss.str(std::string());
+	ss << invitePlayer.getName() << " has been invited.";
+	player.sendTextMessage(MESSAGE_INFO_DESCR, ss.str());
 
 	for (const auto& it : users) {
 		it.second->sendChannelEvent(id, invitePlayer.getName(), CHANNELEVENT_INVITE);
@@ -66,7 +68,9 @@ void PrivateChatChannel::excludePlayer(const Player& player, Player& excludePlay
 
 	removeUser(excludePlayer);
 
-	player.sendTextMessage(MESSAGE_INFO_DESCR, fmt::format("{:s} has been excluded.", excludePlayer.getName()));
+	std::ostringstream ss;
+	ss << excludePlayer.getName() << " has been excluded.";
+	player.sendTextMessage(MESSAGE_INFO_DESCR, ss.str());
 
 	excludePlayer.sendClosePrivate(id);
 
@@ -290,40 +294,40 @@ bool Chat::load()
 		return false;
 	}
 
+
 	for (auto channelNode : doc.child("channels").children()) {
 		uint16_t channelId = pugi::cast<uint16_t>(channelNode.attribute("id").value());
 		std::string channelName = channelNode.attribute("name").as_string();
 		bool isPublic = channelNode.attribute("public").as_bool();
-		pugi::xml_attribute scriptAttribute = channelNode.attribute("script");
 
+		pugi::xml_attribute scriptAttribute = channelNode.attribute("script");
 		auto it = normalChannels.find(channelId);
 		if (it != normalChannels.end()) {
 			ChatChannel& channel = it->second;
 			channel.publicChannel = isPublic;
 			channel.name = channelName;
-
-			if (scriptAttribute) {
+			
+				if (scriptAttribute) {
 				if (scriptInterface.loadFile("data/chatchannels/scripts/" + std::string(scriptAttribute.as_string())) == 0) {
 					channel.onSpeakEvent = scriptInterface.getEvent("onSpeak");
 					channel.canJoinEvent = scriptInterface.getEvent("canJoin");
 					channel.onJoinEvent = scriptInterface.getEvent("onJoin");
 					channel.onLeaveEvent = scriptInterface.getEvent("onLeave");
+					
 				} else {
 					std::cout << "[Warning - Chat::load] Can not load script: " << scriptAttribute.as_string() << std::endl;
 				}
 			}
-
 			UsersMap tempUserMap = std::move(channel.users);
 			for (const auto& pair : tempUserMap) {
 				channel.addUser(*pair.second);
 			}
 			continue;
 		}
-
 		ChatChannel channel(channelId, channelName);
 		channel.publicChannel = isPublic;
-
-		if (scriptAttribute) {
+		
+			if (scriptAttribute) {
 			if (scriptInterface.loadFile("data/chatchannels/scripts/" + std::string(scriptAttribute.as_string())) == 0) {
 				channel.onSpeakEvent = scriptInterface.getEvent("onSpeak");
 				channel.canJoinEvent = scriptInterface.getEvent("canJoin");
@@ -500,7 +504,7 @@ bool Chat::talkToChannel(const Player& player, SpeakClasses type, const std::str
 		} else if (type != TALKTYPE_CHANNEL_Y) {
 			type = TALKTYPE_CHANNEL_Y;
 		}
-	} else if (channelId == CHANNEL_PRIVATE || channelId == CHANNEL_PARTY) {
+	} else if (type != TALKTYPE_CHANNEL_Y && (channelId == CHANNEL_PRIVATE || channelId == CHANNEL_PARTY)) {
 		type = TALKTYPE_CHANNEL_Y;
 	}
 

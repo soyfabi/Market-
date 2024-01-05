@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,19 +26,16 @@
 
 extern Scheduler g_scheduler;
 
-namespace {
-
-const uint16_t OUTPUTMESSAGE_FREE_LIST_CAPACITY = 2048;
+const uint16_t OUTPUTMESSAGE_FREE_LIST_CAPACITY = 35767;
 const std::chrono::milliseconds OUTPUTMESSAGE_AUTOSEND_DELAY {10};
 
-void sendAll(const std::vector<Protocol_ptr>& bufferedProtocols);
-
-void scheduleSendAll(const std::vector<Protocol_ptr>& bufferedProtocols)
+void OutputMessagePool::scheduleSendAll()
 {
-	g_scheduler.addEvent(createSchedulerTask(OUTPUTMESSAGE_AUTOSEND_DELAY.count(), [&]() { sendAll(bufferedProtocols); }));
+	auto functor = std::bind(&OutputMessagePool::sendAll, this);
+	g_scheduler.addEvent(createSchedulerTask(OUTPUTMESSAGE_AUTOSEND_DELAY.count(), functor));
 }
 
-void sendAll(const std::vector<Protocol_ptr>& bufferedProtocols)
+void OutputMessagePool::sendAll()
 {
 	//dispatcher thread
 	for (auto& protocol : bufferedProtocols) {
@@ -49,17 +46,15 @@ void sendAll(const std::vector<Protocol_ptr>& bufferedProtocols)
 	}
 
 	if (!bufferedProtocols.empty()) {
-		scheduleSendAll(bufferedProtocols);
+		scheduleSendAll();
 	}
-}
-
 }
 
 void OutputMessagePool::addProtocolToAutosend(Protocol_ptr protocol)
 {
 	//dispatcher thread
 	if (bufferedProtocols.empty()) {
-		scheduleSendAll(bufferedProtocols);
+		scheduleSendAll();
 	}
 	bufferedProtocols.emplace_back(protocol);
 }
@@ -77,6 +72,6 @@ void OutputMessagePool::removeProtocolFromAutosend(const Protocol_ptr& protocol)
 OutputMessage_ptr OutputMessagePool::getOutputMessage()
 {
 	// LockfreePoolingAllocator<void,...> will leave (void* allocate) ill-formed because
-	// of sizeof(T), so this guarantees that only one list will be initialized
+	// of sizeof(T), so this guaranatees that only one list will be initialized
 	return std::allocate_shared<OutputMessage>(LockfreePoolingAllocator<void, OUTPUTMESSAGE_FREE_LIST_CAPACITY>());
 }

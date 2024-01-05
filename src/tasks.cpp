@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,45 +24,49 @@
 
 extern Game g_game;
 
-Task* createTask(TaskFunc&& f)
+Task* createTask(std::function<void (void)> f)
 {
 	return new Task(std::move(f));
 }
 
-Task* createTask(uint32_t expiration, TaskFunc&& f)
+Task* createTask(uint32_t expiration, std::function<void (void)> f)
 {
 	return new Task(expiration, std::move(f));
 }
 
 void Dispatcher::threadMain()
 {
-	std::vector<Task*> tmpTaskList;
 	// NOTE: second argument defer_lock is to prevent from immediate locking
 	std::unique_lock<std::mutex> taskLockUnique(taskLock, std::defer_lock);
 
 	while (getState() != THREAD_STATE_TERMINATED) {
 		// check if there are tasks waiting
 		taskLockUnique.lock();
+
 		if (taskList.empty()) {
 			//if the list is empty wait for signal
 			taskSignal.wait(taskLockUnique);
 		}
-		tmpTaskList.swap(taskList);
-		taskLockUnique.unlock();
 
-		for (Task* task : tmpTaskList) {
+		if (!taskList.empty()) {
+			// take the first task
+			Task* task = taskList.front();
+			taskList.pop_front();
+			taskLockUnique.unlock();
+
 			if (!task->hasExpired()) {
 				++dispatcherCycle;
 				// execute it
 				(*task)();
 			}
 			delete task;
+		} else {
+			taskLockUnique.unlock();
 		}
-		tmpTaskList.clear();
 	}
 }
 
-void Dispatcher::addTask(Task* task)
+void Dispatcher::addTask(Task* task, bool push_front /*= false*/)
 {
 	bool do_signal = false;
 
@@ -70,7 +74,12 @@ void Dispatcher::addTask(Task* task)
 
 	if (getState() == THREAD_STATE_RUNNING) {
 		do_signal = taskList.empty();
-		taskList.push_back(task);
+
+		if (push_front) {
+			taskList.push_front(task);
+		} else {
+			taskList.push_back(task);
+		}
 	} else {
 		delete task;
 	}

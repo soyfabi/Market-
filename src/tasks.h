@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,6 @@
 #include "thread_holder_base.h"
 #include "enums.h"
 
-using TaskFunc = std::function<void(void)>;
 const int DISPATCHER_TASK_EXPIRATION = 2000;
 const auto SYSTEM_TIME_ZERO = std::chrono::system_clock::time_point(std::chrono::milliseconds(0));
 
@@ -32,8 +31,8 @@ class Task
 {
 	public:
 		// DO NOT allocate this class on the stack
-		explicit Task(TaskFunc&& f) : func(std::move(f)) {}
-		Task(uint32_t ms, TaskFunc&& f) :
+		explicit Task(std::function<void (void)>&& f) : func(std::move(f)) {}
+		Task(uint32_t ms, std::function<void (void)>&& f) :
 			expiration(std::chrono::system_clock::now() + std::chrono::milliseconds(ms)), func(std::move(f)) {}
 
 		virtual ~Task() = default;
@@ -53,21 +52,19 @@ class Task
 		}
 
 	protected:
-		std::chrono::system_clock::time_point expiration = SYSTEM_TIME_ZERO;
-
-	private:
 		// Expiration has another meaning for scheduler tasks,
 		// then it is the time the task should be added to the
 		// dispatcher
-		TaskFunc func;
+		std::chrono::system_clock::time_point expiration = SYSTEM_TIME_ZERO;
+		std::function<void (void)> func;
 };
 
-Task* createTask(TaskFunc&& f);
-Task* createTask(uint32_t expiration, TaskFunc&& f);
+Task* createTask(std::function<void (void)> f);
+Task* createTask(uint32_t expiration, std::function<void (void)> f);
 
 class Dispatcher : public ThreadHolder<Dispatcher> {
 	public:
-		void addTask(Task* task);
+		void addTask(Task* task, bool push_front = false);
 
 		void shutdown();
 
@@ -77,11 +74,12 @@ class Dispatcher : public ThreadHolder<Dispatcher> {
 
 		void threadMain();
 
-	private:
+	protected:
+		std::thread thread;
 		std::mutex taskLock;
 		std::condition_variable taskSignal;
 
-		std::vector<Task*> taskList;
+		std::list<Task*> taskList;
 		uint64_t dispatcherCycle = 0;
 };
 

@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,9 +20,12 @@
 #include "otpch.h"
 
 #include "depotlocker.h"
-#include "player.h"
 
-DepotLocker::DepotLocker(uint16_t type) : Container(type, 30) {}
+DepotLocker::DepotLocker(uint16_t type) :
+	Container(type, 4), depotId(0) 
+	{
+		islocker = true;
+	}
 
 Attr_ReadValue DepotLocker::readAttr(AttrTypes_t attr, PropStream& propStream)
 {
@@ -35,13 +38,16 @@ Attr_ReadValue DepotLocker::readAttr(AttrTypes_t attr, PropStream& propStream)
 	return Item::readAttr(attr, propStream);
 }
 
+ReturnValue DepotLocker::queryAdd(int32_t, const Thing&, uint32_t, uint32_t, Creature*) const
+{
+	return RETURNVALUE_NOTENOUGHROOM;
+}
+
 void DepotLocker::postAddNotification(Thing* thing, const Cylinder* oldParent, int32_t index, cylinderlink_t)
 {
 	if (parent != nullptr) {
 		parent->postAddNotification(thing, oldParent, index, LINK_PARENT);
 	}
-
-	save = true;
 }
 
 void DepotLocker::postRemoveNotification(Thing* thing, const Cylinder* newParent, int32_t index, cylinderlink_t)
@@ -49,8 +55,6 @@ void DepotLocker::postRemoveNotification(Thing* thing, const Cylinder* newParent
 	if (parent != nullptr) {
 		parent->postRemoveNotification(thing, newParent, index, LINK_PARENT);
 	}
-
-	save = true;
 }
 
 void DepotLocker::removeInbox(Inbox* inbox)

@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,15 +23,22 @@
 #include "guild.h"
 #include "ioguild.h"
 
-#include <fmt/format.h>
-
 Guild* IOGuild::loadGuild(uint32_t guildId)
 {
-	Database& db = Database::getInstance();
-	if (DBResult_ptr result = db.storeQuery(fmt::format("SELECT `name` FROM `guilds` WHERE `id` = {:d}", guildId))) {
+	Database& db = Database::getInstance();	
+	std::ostringstream query;
+	query << "SELECT `name`, `balance`, `level`, `points` FROM `guilds` WHERE `id` = " << guildId;
+	if (DBResult_ptr result = db.storeQuery(query.str())) {
 		Guild* guild = new Guild(guildId, result->getString("name"));
 
-		if ((result = db.storeQuery(fmt::format("SELECT `id`, `name`, `level` FROM `guild_ranks` WHERE `guild_id` = {:d}", guildId)))) {
+		guild->setLevel(result->getNumber<uint32_t>("level"));
+		guild->setPoints(result->getNumber<uint32_t>("points"));
+		guild->setBalance(result->getNumber<uint64_t>("balance"));
+
+		query.str(std::string());
+		query << "SELECT `id`, `name`, `level` FROM `guild_ranks` WHERE `guild_id` = " << guildId;
+
+		if ((result = db.storeQuery(query.str()))) {
 			do {
 				guild->addRank(result->getNumber<uint32_t>("id"), result->getString("name"), result->getNumber<uint16_t>("level"));
 			} while (result->next());
@@ -43,9 +50,12 @@ Guild* IOGuild::loadGuild(uint32_t guildId)
 
 uint32_t IOGuild::getGuildIdByName(const std::string& name)
 {
+	
 	Database& db = Database::getInstance();
+	std::ostringstream query;
+	query << "SELECT `id` FROM `guilds` WHERE `name` = " << db.escapeString(name);
 
-	DBResult_ptr result = db.storeQuery(fmt::format("SELECT `id` FROM `guilds` WHERE `name` = {:s}", db.escapeString(name)));
+	DBResult_ptr result = db.storeQuery(query.str());
 	if (!result) {
 		return 0;
 	}
@@ -54,7 +64,11 @@ uint32_t IOGuild::getGuildIdByName(const std::string& name)
 
 void IOGuild::getWarList(uint32_t guildId, GuildWarVector& guildWarVector)
 {
-	DBResult_ptr result = Database::getInstance().storeQuery(fmt::format("SELECT `guild1`, `guild2` FROM `guild_wars` WHERE (`guild1` = {:d} OR `guild2` = {:d}) AND `ended` = 0 AND `status` = 1", guildId, guildId));
+	Database& db = Database::getInstance();
+	std::ostringstream query;
+	query << "SELECT `guild1`, `guild2` FROM `guild_wars` WHERE (`guild1` = " << guildId << " OR `guild2` = " << guildId << ") AND `ended` = 0 AND `status` = 1";
+
+	DBResult_ptr result = db.storeQuery(query.str());
 	if (!result) {
 		return;
 	}
@@ -67,4 +81,29 @@ void IOGuild::getWarList(uint32_t guildId, GuildWarVector& guildWarVector)
 			guildWarVector.push_back(result->getNumber<uint32_t>("guild2"));
 		}
 	} while (result->next());
+}
+
+void IOGuild::setLevel(uint32_t guildId, uint32_t newlevel)
+{
+	Database& db = Database::getInstance();
+	std::ostringstream query;
+	query << "UPDATE `guilds` SET `level` = " << newlevel << " WHERE `id` = " << guildId;
+	db.executeQuery(query.str());
+}
+
+void IOGuild::setPoints(uint32_t guildId, uint32_t newPoints)
+{
+	Database& db = Database::getInstance();
+	std::ostringstream query;
+	query << "UPDATE `guilds` SET `points` = " << newPoints << " WHERE `id` = " << guildId;
+	db.executeQuery(query.str());
+}
+
+void IOGuild::setBalance(uint32_t guildId, uint64_t amount)
+{
+	Database& db = Database::getInstance();
+	std::ostringstream query;
+	// Updating balance
+	query << "UPDATE `guilds` SET `balance` = " << amount << " WHERE `id` = " << guildId;
+	db.executeQuery(query.str());
 }

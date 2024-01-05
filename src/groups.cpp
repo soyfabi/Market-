@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,7 +46,7 @@ const std::unordered_map<std::string, PlayerFlags> ParsePlayerFlagMap = {
 	{"cannotbebanned", PlayerFlag_CannotBeBanned},
 	{"cannotbepushed", PlayerFlag_CannotBePushed},
 	{"hasinfinitecapacity", PlayerFlag_HasInfiniteCapacity},
-	{"canpushallcreatures", PlayerFlag_CanPushAllCreatures},
+	{"cannotpushallcreatures", PlayerFlag_CanPushAllCreatures},
 	{"cantalkredprivate", PlayerFlag_CanTalkRedPrivate},
 	{"cantalkredchannel", PlayerFlag_CanTalkRedChannel},
 	{"talkorangehelpchannel", PlayerFlag_TalkOrangeHelpChannel},
@@ -57,13 +57,12 @@ const std::unordered_map<std::string, PlayerFlags> ParsePlayerFlagMap = {
 	{"setmaxspeed", PlayerFlag_SetMaxSpeed},
 	{"specialvip", PlayerFlag_SpecialVIP},
 	{"notgenerateloot", PlayerFlag_NotGenerateLoot},
+	{"cantalkredchannelanonymous", PlayerFlag_CanTalkRedChannelAnonymous},
 	{"ignoreprotectionzone", PlayerFlag_IgnoreProtectionZone},
 	{"ignorespellcheck", PlayerFlag_IgnoreSpellCheck},
 	{"ignoreweaponcheck", PlayerFlag_IgnoreWeaponCheck},
 	{"cannotbemuted", PlayerFlag_CannotBeMuted},
-	{"isalwayspremium", PlayerFlag_IsAlwaysPremium},
-	{"ignoreyellcheck", PlayerFlag_IgnoreYellCheck},
-	{"ignoresendprivatecheck", PlayerFlag_IgnoreSendPrivateCheck}
+	{"isalwayspremium", PlayerFlag_IsAlwaysPremium}
 };
 
 bool Groups::load()
@@ -86,7 +85,7 @@ bool Groups::load()
 		if (pugi::xml_node node = groupNode.child("flags")) {
 			for (auto flagNode : node.children()) {
 				pugi::xml_attribute attr = flagNode.first_attribute();
-				if (!attr || !attr.as_bool()) {
+				if (!attr || (attr && !attr.as_bool())) {
 					continue;
 				}
 
@@ -96,7 +95,6 @@ bool Groups::load()
 				}
 			}
 		}
-
 		groups.push_back(group);
 	}
 	return true;

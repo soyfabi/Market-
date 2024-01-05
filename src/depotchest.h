@@ -1,6 +1,6 @@
 /**
  * The Forgotten Server - a free and open-source MMORPG server emulator
- * Copyright (C) 2019  Mark Samman <mark.samman@gmail.com>
+ * Copyright (C) 2019 Mark Samman <mark.samman@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 #define FS_DEPOTCHEST_H_6538526014684E3DBC92CC12815B6766
 
 #include "container.h"
-#include "player.h"
 
 class DepotChest final : public Container
 {
@@ -34,28 +33,24 @@ class DepotChest final : public Container
 		}
 
 		//cylinder implementations
-		ReturnValue queryAdd(int32_t index, const Thing& thing, uint32_t count, uint32_t flags, Creature* actor = nullptr) const override;
+		ReturnValue queryAdd(int32_t index, const Thing& thing, uint32_t count,
+				uint32_t flags, Creature* actor = nullptr) const;
 
-		void postAddNotification(Thing* thing, const Cylinder* oldParent, int32_t index, cylinderlink_t link = LINK_OWNER) override;
-		void postRemoveNotification(Thing* thing, const Cylinder* newParent, int32_t index, cylinderlink_t link = LINK_OWNER) override;
+		void postAddNotification(Thing* thing, const Cylinder* oldParent, int32_t index, cylinderlink_t link = LINK_OWNER);
+		void postRemoveNotification(Thing* thing, const Cylinder* newParent, int32_t index, cylinderlink_t link = LINK_OWNER);
 
 		//overrides
-		bool canRemove() const override {
+		bool canRemove() const {
 			return false;
 		}
 
-		Cylinder* getParent() const override;
-		Cylinder* getRealParent() const override {
+		Cylinder* getParent() const;
+		Cylinder* getRealParent() const {
 			return parent;
 		}
 
-		bool needsSave() {
-			return save;
-		}
-
 	private:
-		uint32_t maxDepotItems = 2000;
-		bool save = false;
+		uint32_t maxDepotItems;
 };
 
 #endif
